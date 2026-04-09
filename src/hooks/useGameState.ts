@@ -501,10 +501,19 @@ export function useGameState() {
     if (activePlayers.length === 1) {
       winner = activePlayers[0].id;
     } else if (activePlayers.length === 2) {
-      // Break all alliances if only 2 players left
+      // Break all alliances if only 2 players left (per Chapter 8)
       activePlayers.forEach(p => {
         newPlayers[p.id] = { ...newPlayers[p.id], allies: [], pendingAllianceRequests: [], outgoingAllianceRequests: [] };
       });
+    } else if (activePlayers.length > 2) {
+      // Check if all remaining players are allies (no enemies left) - break alliances
+      const firstPlayer = activePlayers[0];
+      const allAllied = activePlayers.slice(1).every(p => firstPlayer.allies.includes(p.id));
+      if (allAllied) {
+        activePlayers.forEach(p => {
+          newPlayers[p.id] = { ...newPlayers[p.id], allies: [], pendingAllianceRequests: [], outgoingAllianceRequests: [] };
+        });
+      }
     }
     
     // Set up next round
@@ -532,6 +541,123 @@ export function useGameState() {
     };
   };
   
+  // Request alliance with another player
+  const requestAlliance = useCallback((targetPlayerId: string) => {
+    if (!gameState) return;
+    const currentPlayer = getCurrentPlayer();
+    if (!currentPlayer || currentPlayer.isAI) return;
+    
+    // Check if alliances are allowed (more than 2 active players)
+    const activePlayers = Object.values(gameState.players).filter(
+      p => !p.isEliminated && !p.isNeutral
+    );
+    if (activePlayers.length <= 2) return;
+    
+    // Cannot request if already allies or already requested
+    if (currentPlayer.allies.includes(targetPlayerId)) return;
+    if (currentPlayer.outgoingAllianceRequests.includes(targetPlayerId)) return;
+    
+    setGameState(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        players: {
+          ...prev.players,
+          [currentPlayer.id]: {
+            ...prev.players[currentPlayer.id],
+            outgoingAllianceRequests: [...prev.players[currentPlayer.id].outgoingAllianceRequests, targetPlayerId],
+          },
+          [targetPlayerId]: {
+            ...prev.players[targetPlayerId],
+            pendingAllianceRequests: [...prev.players[targetPlayerId].pendingAllianceRequests, currentPlayer.id],
+          },
+        },
+      };
+    });
+  }, [gameState, getCurrentPlayer]);
+  
+  // Accept alliance request
+  const acceptAlliance = useCallback((fromPlayerId: string) => {
+    if (!gameState) return;
+    const currentPlayer = getCurrentPlayer();
+    if (!currentPlayer) return;
+    
+    // Check if request exists
+    if (!currentPlayer.pendingAllianceRequests.includes(fromPlayerId)) return;
+    
+    setGameState(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        players: {
+          ...prev.players,
+          [currentPlayer.id]: {
+            ...prev.players[currentPlayer.id],
+            allies: [...prev.players[currentPlayer.id].allies, fromPlayerId],
+            pendingAllianceRequests: prev.players[currentPlayer.id].pendingAllianceRequests.filter(id => id !== fromPlayerId),
+          },
+          [fromPlayerId]: {
+            ...prev.players[fromPlayerId],
+            allies: [...prev.players[fromPlayerId].allies, currentPlayer.id],
+            outgoingAllianceRequests: prev.players[fromPlayerId].outgoingAllianceRequests.filter(id => id !== currentPlayer.id),
+          },
+        },
+      };
+    });
+  }, [gameState, getCurrentPlayer]);
+  
+  // Reject alliance request
+  const rejectAlliance = useCallback((fromPlayerId: string) => {
+    if (!gameState) return;
+    const currentPlayer = getCurrentPlayer();
+    if (!currentPlayer) return;
+    
+    setGameState(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        players: {
+          ...prev.players,
+          [currentPlayer.id]: {
+            ...prev.players[currentPlayer.id],
+            pendingAllianceRequests: prev.players[currentPlayer.id].pendingAllianceRequests.filter(id => id !== fromPlayerId),
+          },
+          [fromPlayerId]: {
+            ...prev.players[fromPlayerId],
+            outgoingAllianceRequests: prev.players[fromPlayerId].outgoingAllianceRequests.filter(id => id !== currentPlayer.id),
+          },
+        },
+      };
+    });
+  }, [gameState, getCurrentPlayer]);
+  
+  // Break existing alliance
+  const breakAlliance = useCallback((allyId: string) => {
+    if (!gameState) return;
+    const currentPlayer = getCurrentPlayer();
+    if (!currentPlayer) return;
+    
+    if (!currentPlayer.allies.includes(allyId)) return;
+    
+    setGameState(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        players: {
+          ...prev.players,
+          [currentPlayer.id]: {
+            ...prev.players[currentPlayer.id],
+            allies: prev.players[currentPlayer.id].allies.filter(id => id !== allyId),
+          },
+          [allyId]: {
+            ...prev.players[allyId],
+            allies: prev.players[allyId].allies.filter(id => id !== currentPlayer.id),
+          },
+        },
+      };
+    });
+  }, [gameState, getCurrentPlayer]);
+  
   return {
     gameState,
     selectedCountryId,
@@ -546,5 +672,9 @@ export function useGameState() {
     removePendingAction,
     clearPendingActions,
     endTurn,
+    requestAlliance,
+    acceptAlliance,
+    rejectAlliance,
+    breakAlliance,
   };
 }
