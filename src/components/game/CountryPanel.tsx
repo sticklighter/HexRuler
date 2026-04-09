@@ -1,9 +1,8 @@
-// Country Info Panel - Shows selected country details and actions
-import { useState } from 'react';
+// Country Info Panel - Shows selected country details and actions (RIGHT SIDE)
+import { useState, useEffect } from 'react';
 import type { GameState, Country, Player, PlannedAction, BuildAction, MoveAction, AttackAction } from '@/types/game';
 import { BUILDING_COSTS, BUILDING_LIMITS } from '@/types/game';
 import { canBuild, getAttackableCountries, getPlayerCountries, getPlayerTotalResources } from '@/utils/gameUtils';
-import { areNeighbors, coordToId } from '@/utils/hexUtils';
 
 interface CountryPanelProps {
   country: Country;
@@ -30,9 +29,7 @@ export function CountryPanel({
 }: CountryPanelProps) {
   const [activeTab, setActiveTab] = useState<'info' | 'build' | 'move' | 'attack'>('info');
   const [moveTarget, setMoveTarget] = useState<string>('');
-  const [moveAmount, setMoveAmount] = useState<number>(100);
   const [attackTarget, setAttackTarget] = useState<string>('');
-  const [attackAmount, setAttackAmount] = useState<number>(100);
 
   const isOwned = country.ownerId === currentPlayer.id;
   const resources = getPlayerTotalResources(currentPlayer.id, gameState.countries);
@@ -62,6 +59,16 @@ export function CountryPanel({
     }
   });
 
+  // Default army amounts to max available
+  const [moveAmount, setMoveAmount] = useState<number>(availableArmy);
+  const [attackAmount, setAttackAmount] = useState<number>(availableArmy);
+
+  // Update amounts when available army changes
+  useEffect(() => {
+    setMoveAmount(availableArmy);
+    setAttackAmount(availableArmy);
+  }, [availableArmy]);
+
   // Get pending building counts for this country
   const pendingBuilds: Record<string, number> = { city: 0, university: 0, factory: 0, base: 0 };
   pendingActions.forEach((action) => {
@@ -87,15 +94,13 @@ export function CountryPanel({
   const attackableCountries = isOwned ? getAttackableCountries(country, gameState.countries, currentPlayer) : [];
 
   const handleBuild = (type: 'city' | 'university' | 'factory' | 'base') => {
-    if (onBuild(type)) {
-
-      // Success feedback could go here
-    }};
+    onBuild(type);
+  };
 
   const handleMove = () => {
     if (moveTarget && moveAmount > 0) {
       if (onMove(moveTarget, moveAmount)) {
-        setMoveAmount(100);
+        setMoveAmount(0);
       }
     }
   };
@@ -103,26 +108,26 @@ export function CountryPanel({
   const handleAttack = () => {
     if (attackTarget && attackAmount >= 100) {
       if (onAttack(attackTarget, attackAmount)) {
-        setAttackAmount(100);
+        setAttackAmount(0);
       }
     }
   };
 
   return (
-    <div data-ev-id="ev_c863b436b0" className="absolute bottom-4 left-4 z-20 w-96 bg-slate-800/95 backdrop-blur-sm rounded-xl border border-slate-700 shadow-2xl overflow-hidden">
+    <div data-ev-id="ev_30e9b7c2f3" className="absolute bottom-4 right-4 z-20 w-96 bg-slate-800/95 backdrop-blur-sm rounded-xl border border-slate-700 shadow-2xl overflow-hidden">
       {/* Header */}
-      <div data-ev-id="ev_a2b8c245fb" className="flex items-center justify-between p-4 border-b border-slate-700">
-        <div data-ev-id="ev_355be8627a" className="flex items-center gap-3">
-          <div data-ev-id="ev_540b81aee1"
+      <div data-ev-id="ev_224b3f866f" className="flex items-center justify-between p-4 border-b border-slate-700">
+        <div data-ev-id="ev_1d9f5839f0" className="flex items-center gap-3">
+          <div data-ev-id="ev_8b737f5c80"
           className="w-6 h-6 rounded-lg"
           style={{ backgroundColor: owner?.color || '#6B7280' }} />
 
-          <div data-ev-id="ev_d8606ffae7">
-            <h3 data-ev-id="ev_8daf464f04" className="text-white font-bold">{owner?.name || 'Neutral'}</h3>
-            <p data-ev-id="ev_a6200daf5f" className="text-slate-400 text-xs">({country.coord.q}, {country.coord.r})</p>
+          <div data-ev-id="ev_36b2ccbabb">
+            <h3 data-ev-id="ev_5f4fd45851" className="text-white font-bold">{owner?.name || 'Neutral'}</h3>
+            <p data-ev-id="ev_1aa55b16db" className="text-slate-400 text-xs">({country.coord.q}, {country.coord.r})</p>
           </div>
         </div>
-        <button data-ev-id="ev_9b33d9a0ed"
+        <button data-ev-id="ev_a6f2b15ffd"
         onClick={onClose}
         className="text-slate-400 hover:text-white transition-colors p-1">
 
@@ -132,9 +137,9 @@ export function CountryPanel({
       
       {/* Tabs */}
       {isOwned &&
-      <div data-ev-id="ev_3aef76edc5" className="flex border-b border-slate-700">
+      <div data-ev-id="ev_8ca5c91890" className="flex border-b border-slate-700">
           {(['info', 'build', 'move', 'attack'] as const).map((tab) =>
-        <button data-ev-id="ev_edca98cd73"
+        <button data-ev-id="ev_7f97e4eb15"
         key={tab}
         onClick={() => setActiveTab(tab)}
         className={`flex-1 py-2 text-sm font-semibold transition-colors ${
@@ -150,13 +155,13 @@ export function CountryPanel({
       }
       
       {/* Content */}
-      <div data-ev-id="ev_49e7b68817" className="p-4 max-h-80 overflow-y-auto">
+      <div data-ev-id="ev_90d02d674b" className="p-4 max-h-80 overflow-y-auto">
         {activeTab === 'info' &&
-        <div data-ev-id="ev_9c00a36fd3" className="flex flex-col gap-4">
+        <div data-ev-id="ev_ba9c856793" className="flex flex-col gap-4">
             {/* Resources */}
-            <div data-ev-id="ev_3fd7095d1d">
-              <h4 data-ev-id="ev_c727ddb487" className="text-slate-400 text-xs font-semibold mb-2">RESOURCES</h4>
-              <div data-ev-id="ev_e4e69b78b0" className="grid grid-cols-2 gap-2">
+            <div data-ev-id="ev_87b5b35d7b">
+              <h4 data-ev-id="ev_3e0a6c4e1f" className="text-slate-400 text-xs font-semibold mb-2">RESOURCES</h4>
+              <div data-ev-id="ev_d8720be898" className="grid grid-cols-2 gap-2">
                 <ResourceRow icon="💰" label="Money" value={country.resources.money} />
                 <ResourceRow icon="🎓" label="Education" value={country.resources.education} />
                 <ResourceRow icon="🔬" label="Technology" value={country.resources.technology} />
@@ -165,20 +170,20 @@ export function CountryPanel({
             </div>
             
             {/* Buildings */}
-            <div data-ev-id="ev_7c1dc369b2">
-              <h4 data-ev-id="ev_5eef8e5b1a" className="text-slate-400 text-xs font-semibold mb-2">BUILDINGS</h4>
-              <div data-ev-id="ev_e0f969f7f0" className="grid grid-cols-2 gap-2">
+            <div data-ev-id="ev_29730fc694">
+              <h4 data-ev-id="ev_da86305009" className="text-slate-400 text-xs font-semibold mb-2">BUILDINGS</h4>
+              <div data-ev-id="ev_91ede5f224" className="grid grid-cols-2 gap-2">
                 <BuildingRow icon="🏙️" label="Cities" value={effectiveBuildings.cities} max={4} pending={pendingBuilds.city} />
                 <BuildingRow icon="🎓" label="Universities" value={effectiveBuildings.universities} max={2} pending={pendingBuilds.university} />
                 <BuildingRow icon="🏭" label="Factories" value={effectiveBuildings.factories} max={8} pending={pendingBuilds.factory} />
-                <BuildingRow icon="🏰" label="Bases" value={effectiveBuildings.bases} max={2} pending={pendingBuilds.base} />
+                <BuildingRow icon="🏰" label="Bases" value={effectiveBuildings.bases} max={1} pending={pendingBuilds.base} />
               </div>
             </div>
           </div>
         }
         
         {activeTab === 'build' && isOwned &&
-        <div data-ev-id="ev_ef9a5df730" className="flex flex-col gap-3">
+        <div data-ev-id="ev_a0869f1d5e" className="flex flex-col gap-3">
             {(['city', 'university', 'factory', 'base'] as const).map((type) => {
             const tempCountry = { ...country, buildings: effectiveBuildings };
             const check = canBuild(tempCountry, type, resources);
@@ -187,19 +192,19 @@ export function CountryPanel({
             const current = effectiveBuildings[type === 'city' ? 'cities' : type === 'university' ? 'universities' : type === 'factory' ? 'factories' : 'bases'];
 
             return (
-              <div data-ev-id="ev_eefc2174fc" key={type} className="bg-slate-700/50 rounded-lg p-3">
-                  <div data-ev-id="ev_accd3bca18" className="flex items-center justify-between mb-2">
-                    <span data-ev-id="ev_ba2ae3e071" className="text-white font-semibold capitalize">
+              <div data-ev-id="ev_fc1bffb771" key={type} className="bg-slate-700/50 rounded-lg p-3">
+                  <div data-ev-id="ev_045c5bb345" className="flex items-center justify-between mb-2">
+                    <span data-ev-id="ev_7d02f0f14e" className="text-white font-semibold capitalize">
                       {getBuildingEmoji(type)} {type}
                     </span>
-                    <span data-ev-id="ev_a1481de489" className="text-slate-400 text-xs">{current}/{limit}</span>
+                    <span data-ev-id="ev_acf24f92c0" className="text-slate-400 text-xs">{current}/{limit}</span>
                   </div>
-                  <div data-ev-id="ev_02efe1c259" className="text-xs text-slate-400 mb-2">
+                  <div data-ev-id="ev_e7992c0ef2" className="text-xs text-slate-400 mb-2">
                     Cost: {cost.money > 0 && `💰${cost.money.toLocaleString()}`}
                     {cost.education > 0 && ` 🎓${cost.education.toLocaleString()}`}
                     {cost.technology > 0 && ` 🔬${cost.technology.toLocaleString()}`}
                   </div>
-                  <button data-ev-id="ev_07385d64f6"
+                  <button data-ev-id="ev_935a986421"
                 onClick={() => handleBuild(type)}
                 disabled={!check.canBuild}
                 className={`w-full py-2 rounded-lg text-sm font-semibold transition-colors ${
@@ -217,40 +222,40 @@ export function CountryPanel({
         }
         
         {activeTab === 'move' && isOwned &&
-        <div data-ev-id="ev_49c6f61ca5" className="flex flex-col gap-4">
-            <div data-ev-id="ev_29734e6efe" className="text-slate-400 text-sm">
-              Available Army: <span data-ev-id="ev_fe3fee142a" className="text-white font-bold">{availableArmy.toLocaleString()}</span>
+        <div data-ev-id="ev_c2629179a5" className="flex flex-col gap-4">
+            <div data-ev-id="ev_a217e842f5" className="text-slate-400 text-sm">
+              Available Army: <span data-ev-id="ev_1d36805b10" className="text-white font-bold">{availableArmy.toLocaleString()}</span>
             </div>
             
             {playerCountries.length > 0 ?
           <>
-                <div data-ev-id="ev_57d6526bb5">
-                  <label data-ev-id="ev_c57d01362f" className="block text-slate-400 text-xs mb-1">Destination</label>
-                  <select data-ev-id="ev_eaddf35fe3"
+                <div data-ev-id="ev_309d9ced70">
+                  <label data-ev-id="ev_1dd09e1fe6" className="block text-slate-400 text-xs mb-1">Destination</label>
+                  <select data-ev-id="ev_2bb972a115"
               value={moveTarget}
               onChange={(e) => setMoveTarget(e.target.value)}
               className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm">
 
-                    <option data-ev-id="ev_819d26c72a" value="">Select country...</option>
+                    <option data-ev-id="ev_4742458d2d" value="">Select country...</option>
                     {playerCountries.map((c) =>
-                <option data-ev-id="ev_c9b6ecea94" key={c.id} value={c.id}>
+                <option data-ev-id="ev_ea7d380329" key={c.id} value={c.id}>
                         ({c.coord.q}, {c.coord.r}) - {c.resources.army.toLocaleString()} army
                       </option>
                 )}
                   </select>
                 </div>
                 
-                <div data-ev-id="ev_eb1c35c45d">
-                  <label data-ev-id="ev_2820054318" className="block text-slate-400 text-xs mb-1">Amount</label>
-                  <input data-ev-id="ev_9f152198a5"
+                <div data-ev-id="ev_7afc1e16aa">
+                  <label data-ev-id="ev_ebdb4d7f71" className="block text-slate-400 text-xs mb-1">Amount</label>
+                  <input data-ev-id="ev_488327de6b"
               type="number"
-              min={1}
+              min={0}
               max={availableArmy}
               value={moveAmount}
               onChange={(e) => setMoveAmount(Math.min(parseInt(e.target.value) || 0, availableArmy))}
               className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm" />
 
-                  <input data-ev-id="ev_b2e87de94b"
+                  <input data-ev-id="ev_19f7cb9795"
               type="range"
               min={0}
               max={availableArmy}
@@ -260,7 +265,7 @@ export function CountryPanel({
 
                 </div>
                 
-                <button data-ev-id="ev_3c3e8c1bb1"
+                <button data-ev-id="ev_06cac9fd85"
             onClick={handleMove}
             disabled={!moveTarget || moveAmount < 1 || moveAmount > availableArmy}
             className={`w-full py-3 rounded-lg font-semibold transition-colors ${
@@ -273,32 +278,32 @@ export function CountryPanel({
                 </button>
               </> :
 
-          <p data-ev-id="ev_2295c88958" className="text-slate-500 text-sm">No other countries to move to.</p>
+          <p data-ev-id="ev_7aadb68bc0" className="text-slate-500 text-sm">No other countries to move to.</p>
           }
           </div>
         }
         
         {activeTab === 'attack' && isOwned &&
-        <div data-ev-id="ev_41cce0dd33" className="flex flex-col gap-4">
-            <div data-ev-id="ev_7ccd601b87" className="text-slate-400 text-sm">
-              Available Army: <span data-ev-id="ev_54e235f363" className="text-white font-bold">{availableArmy.toLocaleString()}</span>
-              {availableArmy < 100 && <span data-ev-id="ev_072e6e55bc" className="text-red-400 ml-2">(Min 100 to attack)</span>}
+        <div data-ev-id="ev_41107d13cd" className="flex flex-col gap-4">
+            <div data-ev-id="ev_37e6ede8fb" className="text-slate-400 text-sm">
+              Available Army: <span data-ev-id="ev_45c569e157" className="text-white font-bold">{availableArmy.toLocaleString()}</span>
+              {availableArmy < 100 && <span data-ev-id="ev_1be14045da" className="text-red-400 ml-2">(Min 100 to attack)</span>}
             </div>
             
             {attackableCountries.length > 0 ?
           <>
-                <div data-ev-id="ev_7d11d61766">
-                  <label data-ev-id="ev_358fc29036" className="block text-slate-400 text-xs mb-1">Target</label>
-                  <select data-ev-id="ev_96aaf0a81e"
+                <div data-ev-id="ev_68463a21db">
+                  <label data-ev-id="ev_62b08b6f53" className="block text-slate-400 text-xs mb-1">Target</label>
+                  <select data-ev-id="ev_2bf369d683"
               value={attackTarget}
               onChange={(e) => setAttackTarget(e.target.value)}
               className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm">
 
-                    <option data-ev-id="ev_83a5348995" value="">Select target...</option>
+                    <option data-ev-id="ev_bc138ce629" value="">Select target...</option>
                     {attackableCountries.map((c) => {
                   const targetOwner = c.ownerId ? gameState.players[c.ownerId] : null;
                   return (
-                    <option data-ev-id="ev_a0876d9efb" key={c.id} value={c.id}>
+                    <option data-ev-id="ev_f940722c75" key={c.id} value={c.id}>
                           {targetOwner?.name || 'Neutral'} - ⚔️{c.resources.army.toLocaleString()}
                         </option>);
 
@@ -306,19 +311,19 @@ export function CountryPanel({
                   </select>
                 </div>
                 
-                <div data-ev-id="ev_c8dffba27b">
-                  <label data-ev-id="ev_0836ffd976" className="block text-slate-400 text-xs mb-1">Attack Force</label>
-                  <input data-ev-id="ev_e0c8475aad"
+                <div data-ev-id="ev_983a0df0a7">
+                  <label data-ev-id="ev_42cca81fc4" className="block text-slate-400 text-xs mb-1">Attack Force</label>
+                  <input data-ev-id="ev_adffcbf450"
               type="number"
               min={100}
               max={availableArmy}
               value={attackAmount}
-              onChange={(e) => setAttackAmount(Math.min(parseInt(e.target.value) || 100, availableArmy))}
+              onChange={(e) => setAttackAmount(Math.min(parseInt(e.target.value) || 0, availableArmy))}
               className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm" />
 
-                  <input data-ev-id="ev_eee02aa611"
+                  <input data-ev-id="ev_657d264643"
               type="range"
-              min={100}
+              min={Math.min(100, availableArmy)}
               max={availableArmy}
               value={attackAmount}
               onChange={(e) => setAttackAmount(parseInt(e.target.value))}
@@ -327,26 +332,26 @@ export function CountryPanel({
                 </div>
                 
                 {attackTarget &&
-            <div data-ev-id="ev_3232138dcb" className="bg-slate-700/50 rounded-lg p-3">
-                    <div data-ev-id="ev_76c0502511" className="text-xs text-slate-400 mb-1">Battle Prediction</div>
-                    <div data-ev-id="ev_56671f4795" className="text-sm">
+            <div data-ev-id="ev_36b071edd9" className="bg-slate-700/50 rounded-lg p-3">
+                    <div data-ev-id="ev_9fa7770a1e" className="text-xs text-slate-400 mb-1">Battle Prediction</div>
+                    <div data-ev-id="ev_9382483885" className="text-sm">
                       {(() => {
                   const target = gameState.countries[attackTarget];
                   if (!target) return null;
                   const defenderArmy = target.resources.army;
                   if (attackAmount > defenderArmy) {
-                    return <span data-ev-id="ev_174025385a" className="text-green-400">WIN - {(attackAmount - defenderArmy).toLocaleString()} army survives</span>;
+                    return <span data-ev-id="ev_5793b3f27a" className="text-green-400">WIN - {(attackAmount - defenderArmy).toLocaleString()} army survives</span>;
                   } else if (attackAmount === defenderArmy) {
-                    return <span data-ev-id="ev_edd8528c4e" className="text-yellow-400">TIE - Defender wins, both armies lost</span>;
+                    return <span data-ev-id="ev_de0a6aedd7" className="text-yellow-400">TIE - Defender wins, both armies lost</span>;
                   } else {
-                    return <span data-ev-id="ev_ed877eba25" className="text-red-400">LOSE - Need more than {defenderArmy.toLocaleString()}</span>;
+                    return <span data-ev-id="ev_878ca7fb83" className="text-red-400">LOSE - Need more than {defenderArmy.toLocaleString()}</span>;
                   }
                 })()}
                     </div>
                   </div>
             }
                 
-                <button data-ev-id="ev_74bc196cfd"
+                <button data-ev-id="ev_cdaa4860c2"
             onClick={handleAttack}
             disabled={!attackTarget || attackAmount < 100 || attackAmount > availableArmy}
             className={`w-full py-3 rounded-lg font-semibold transition-colors ${
@@ -359,7 +364,7 @@ export function CountryPanel({
                 </button>
               </> :
 
-          <p data-ev-id="ev_ef36df9d1c" className="text-slate-500 text-sm">
+          <p data-ev-id="ev_ac976a5578" className="text-slate-500 text-sm">
                 {availableArmy < 100 ?
             'Need at least 100 army to attack.' :
             'No adjacent enemy countries to attack.'}
@@ -374,10 +379,10 @@ export function CountryPanel({
 
 function ResourceRow({ icon, label, value, highlight }: {icon: string;label: string;value: number;highlight?: boolean;}) {
   return (
-    <div data-ev-id="ev_cc3d0b23e0" className="flex items-center gap-2 bg-slate-700/50 rounded px-2 py-1">
-      <span data-ev-id="ev_61200b260b">{icon}</span>
-      <span data-ev-id="ev_9ee121a7ea" className="text-slate-400 text-xs">{label}</span>
-      <span data-ev-id="ev_d9bfb98bed" className={`ml-auto font-bold text-sm ${highlight ? 'text-amber-400' : 'text-white'}`}>
+    <div data-ev-id="ev_b3a9b82981" className="flex items-center gap-2 bg-slate-700/50 rounded px-2 py-1">
+      <span data-ev-id="ev_4678b6f8f7">{icon}</span>
+      <span data-ev-id="ev_e68fef0d94" className="text-slate-400 text-xs">{label}</span>
+      <span data-ev-id="ev_b3d3823e28" className={`ml-auto font-bold text-sm ${highlight ? 'text-amber-400' : 'text-white'}`}>
         {value.toLocaleString()}
       </span>
     </div>);
@@ -386,13 +391,13 @@ function ResourceRow({ icon, label, value, highlight }: {icon: string;label: str
 
 function BuildingRow({ icon, label, value, max, pending }: {icon: string;label: string;value: number;max: number;pending: number;}) {
   return (
-    <div data-ev-id="ev_88e804609c" className="flex items-center gap-2 bg-slate-700/50 rounded px-2 py-1">
-      <span data-ev-id="ev_b249be355d">{icon}</span>
-      <span data-ev-id="ev_7c8deb01f3" className="text-slate-400 text-xs">{label}</span>
-      <span data-ev-id="ev_7f4f94ec06" className="ml-auto font-bold text-sm text-white">
+    <div data-ev-id="ev_cec59c87c1" className="flex items-center gap-2 bg-slate-700/50 rounded px-2 py-1">
+      <span data-ev-id="ev_0c4ae73b74">{icon}</span>
+      <span data-ev-id="ev_e8119c404f" className="text-slate-400 text-xs">{label}</span>
+      <span data-ev-id="ev_c87cca8786" className="ml-auto font-bold text-sm text-white">
         {value - pending}
-        {pending > 0 && <span data-ev-id="ev_658d408a2f" className="text-amber-400">+{pending}</span>}
-        <span data-ev-id="ev_899f086d8b" className="text-slate-500">/{max}</span>
+        {pending > 0 && <span data-ev-id="ev_82564baaaa" className="text-amber-400">+{pending}</span>}
+        <span data-ev-id="ev_d97f714f7b" className="text-slate-500">/{max}</span>
       </span>
     </div>);
 
