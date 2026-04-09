@@ -11,7 +11,7 @@ export function PendingActionsPanel({ actions, gameState, onRemoveAction }: Pend
   if (actions.length === 0) return null;
 
   return (
-    <div data-ev-id="ev_b801ee9ffe" className="absolute top-24 left-4 z-20 w-72 bg-slate-800/95 backdrop-blur-sm rounded-xl border border-slate-700 shadow-xl overflow-hidden">
+    <div data-ev-id="ev_b801ee9ffe" className="w-72 bg-slate-800/95 backdrop-blur-sm rounded-xl border border-slate-700 shadow-xl overflow-hidden">
       <div data-ev-id="ev_3c9bd56bab" className="p-3 border-b border-slate-700">
         <h3 data-ev-id="ev_e12c2620bc" className="text-white font-semibold text-sm">Pending Actions ({actions.length})</h3>
         <p data-ev-id="ev_4bdad6cc39" className="text-slate-500 text-xs">Click ✕ to cancel</p>
