@@ -3,11 +3,10 @@ import { useCallback, useEffect } from 'react';
 import { useGameState } from '@/hooks/useGameState';
 import { SetupScreen } from '@/components/game/SetupScreen';
 import { HexGrid } from '@/components/game/HexGrid';
-import { GameHUD } from '@/components/game/GameHUD';
+import { LeftSidebar } from '@/components/game/LeftSidebar';
 import { CountryPanel } from '@/components/game/CountryPanel';
 import { PendingActionsPanel } from '@/components/game/PendingActionsPanel';
 import { VictoryScreen } from '@/components/game/VictoryScreen';
-import { PlayerList } from '@/components/game/PlayerList';
 import { getAttackableCountries } from '@/utils/gameUtils';
 import type { GameConfig } from '@/types/game';
 
@@ -26,6 +25,10 @@ export default function Index() {
     removePendingAction,
     clearPendingActions,
     endTurn,
+    requestAlliance,
+    acceptAlliance,
+    rejectAlliance,
+    breakAlliance
   } = useGameState();
 
   const currentPlayer = getCurrentPlayer();
@@ -33,7 +36,6 @@ export default function Index() {
   // Handle AI turns automatically
   useEffect(() => {
     if (gameState && currentPlayer?.isAI && !currentPlayer.isNeutral && gameState.phase === 'planning') {
-      // Small delay before AI acts
       const timer = setTimeout(() => {
         endTurn();
       }, 500);
@@ -64,10 +66,6 @@ export default function Index() {
     return addAttackAction(selectedCountryId, toCountryId, amount);
   }, [selectedCountryId, addAttackAction]);
 
-  const handleNewGame = useCallback(() => {
-    resetGame();
-  }, [resetGame]);
-
   // Show setup screen if no game
   if (!gameState) {
     return <SetupScreen onStartGame={handleStartGame} />;
@@ -86,7 +84,7 @@ export default function Index() {
   const winner = gameState.winner ? gameState.players[gameState.winner] : null;
 
   return (
-    <div data-ev-id="ev_97663b5058" className="h-screen w-screen overflow-hidden bg-slate-900">
+    <div data-ev-id="ev_7c47818672" className="h-screen w-screen overflow-hidden bg-slate-900">
       {/* Main hex grid */}
       <HexGrid
         gameState={gameState}
@@ -96,31 +94,34 @@ export default function Index() {
         onSelectCountry={handleSelectCountry} />
 
       
-      {/* HUD */}
+      {/* Left Sidebar */}
       {currentPlayer &&
-      <GameHUD
+      <LeftSidebar
         gameState={gameState}
         currentPlayer={currentPlayer}
         pendingActionsCount={pendingActions.length}
         onEndTurn={endTurn}
-        onClearActions={clearPendingActions} />
+        onClearActions={clearPendingActions}
+        onRestart={resetGame}
+        onRequestAlliance={requestAlliance}
+        onAcceptAlliance={acceptAlliance}
+        onRejectAlliance={rejectAlliance}
+        onBreakAlliance={breakAlliance} />
 
       }
       
-      {/* Player list */}
-      <PlayerList
-        gameState={gameState}
-        currentPlayerId={currentPlayer?.id || null} />
+      {/* Pending actions panel - positioned to the right of sidebar */}
+      {pendingActions.length > 0 &&
+      <div data-ev-id="ev_73ceb6e549" className="absolute top-20 left-[280px] z-20">
+          <PendingActionsPanel
+          actions={pendingActions}
+          gameState={gameState}
+          onRemoveAction={removePendingAction} />
 
+        </div>
+      }
       
-      {/* Pending actions */}
-      <PendingActionsPanel
-        actions={pendingActions}
-        gameState={gameState}
-        onRemoveAction={removePendingAction} />
-
-      
-      {/* Selected country panel */}
+      {/* Selected country panel (RIGHT SIDE) */}
       {selectedCountry && currentPlayer &&
       <CountryPanel
         country={selectedCountry}
@@ -140,7 +141,7 @@ export default function Index() {
       <VictoryScreen
         winner={winner}
         gameState={gameState}
-        onNewGame={handleNewGame} />
+        onNewGame={resetGame} />
 
       }
     </div>);
