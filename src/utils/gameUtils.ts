@@ -4,13 +4,12 @@ import type {
   Country,
   Player,
   Resources,
-  Buildings,
   PlannedAction,
   CombatLogEntry,
   GameConfig,
 } from '@/types/game';
 import { BUILDING_COSTS, BUILDING_LIMITS, PLAYER_COLORS, NEUTRAL_COLOR } from '@/types/game';
-import { generateMapCoords, coordToId, getNeighbors, areNeighbors, idToCoord } from '@/utils/hexUtils';
+import { generateMapCoords, coordToId, getNeighbors, areNeighbors } from '@/utils/hexUtils';
 
 // Calculate income from buildings
 export function calculateIncome(country: Country, player: Player, allCountries: Country[]): Resources {
@@ -18,48 +17,48 @@ export function calculateIncome(country: Country, player: Player, allCountries: 
   const income: Resources = { money: 0, education: 0, technology: 0, army: 0 };
 
   // City income: 1000 per city + cumulative bonuses
-  // Bonuses: 2nd +250, 3rd +250 (total 500), 4th +500 (total 1000)
   for (let i = 1; i <= cities; i++) {
     income.money += 1000;
   }
-  if (cities >= 2) income.money += 250;  // 2nd city bonus
-  if (cities >= 3) income.money += 250;  // 3rd city bonus (cumulative: 500)
-  if (cities >= 4) income.money += 500;  // 4th city bonus (cumulative: 1000)
+  if (cities >= 2) income.money += 250;
+  if (cities >= 3) income.money += 250;
+  if (cities >= 4) income.money += 500;
 
   // University income: 500 education per uni + bonuses
-  // 1st uni: +250 money, 2nd uni: +250 money (total 500) AND +250 education
   for (let i = 1; i <= universities; i++) {
     income.education += 500;
   }
-  if (universities >= 1) income.money += 250;  // 1st uni bonus
+  if (universities >= 1) income.money += 250;
   if (universities >= 2) {
-    income.money += 250;      // 2nd uni money bonus (total 500)
-    income.education += 250;  // 2nd uni education bonus
+    income.money += 250;
+    income.education += 250;
   }
 
   // Factory income: 250 tech + 250 money per factory + cumulative tech bonuses
-  // Bonuses: 2nd +50, 4th +50 (sum 100), 6th +100 (sum 200), 8th +200 (sum 400)
   for (let i = 1; i <= factories; i++) {
     income.technology += 250;
     income.money += 250;
   }
-  if (factories >= 2) income.technology += 50;   // 2nd factory bonus
-  if (factories >= 4) income.technology += 50;   // 4th factory bonus (sum: 100)
-  if (factories >= 6) income.technology += 100;  // 6th factory bonus (sum: 200)
-  if (factories >= 8) income.technology += 200;  // 8th factory bonus (sum: 400)
+  if (factories >= 2) income.technology += 50;
+  if (factories >= 4) income.technology += 50;
+  if (factories >= 6) income.technology += 100;
+  if (factories >= 8) income.technology += 200;
 
-  // Base income: 1000 army + global and local bonuses (max 1 base per country)
+  // Base income: 1000 army + global and local bonuses
+  // For NEUTRAL countries, only base income (no global bonuses)
   if (bases >= 1) {
     income.army += 1000;
     
-    // Global bonuses - count other countries and other bases
-    const playerCountries = Object.values(allCountries).filter(c => c.ownerId === player.id);
-    const additionalCountries = playerCountries.length - 1;
-    const totalBases = playerCountries.reduce((sum, c) => sum + c.buildings.bases, 0);
-    const additionalBases = totalBases - 1;
-    
-    income.army += additionalCountries * 100;  // +100 per additional country
-    income.army += additionalBases * 150;      // +150 per additional base globally
+    // Global bonuses only for non-neutral players
+    if (!player.isNeutral) {
+      const playerCountries = Object.values(allCountries).filter(c => c.ownerId === player.id);
+      const additionalCountries = playerCountries.length - 1;
+      const totalBases = playerCountries.reduce((sum, c) => sum + c.buildings.bases, 0);
+      const additionalBases = totalBases - 1;
+      
+      income.army += additionalCountries * 100;
+      income.army += additionalBases * 150;
+    }
     
     // Local bonus: +250 if THIS country has 1 base, 2 universities and 8 factories
     if (bases >= 1 && universities >= 2 && factories >= 8) {
@@ -82,12 +81,10 @@ export function canBuild(
                   buildingType === 'university' ? 'universities' :
                   buildingType === 'factory' ? 'factories' : 'bases'];
 
-  // Check limit
   if (current >= limit) {
     return { canBuild: false, reason: `Maximum ${limit} ${buildingType}(s) per country` };
   }
 
-  // Check resources
   if (playerResources.money < cost.money) {
     return { canBuild: false, reason: `Need ${cost.money} money` };
   }
@@ -98,9 +95,7 @@ export function canBuild(
     return { canBuild: false, reason: `Need ${cost.technology} technology` };
   }
 
-  // Check prerequisites
   if (buildingType === 'university') {
-    // Requires at least 2 cities per university
     const requiredCities = (country.buildings.universities + 1) * 2;
     if (country.buildings.cities < requiredCities) {
       return { canBuild: false, reason: `Need ${requiredCities} cities for ${country.buildings.universities + 1} universities` };
@@ -108,7 +103,6 @@ export function canBuild(
   }
 
   if (buildingType === 'factory') {
-    // Requires at least 1 city per 2 factories
     const requiredCities = Math.ceil((country.buildings.factories + 1) / 2);
     if (country.buildings.cities < requiredCities) {
       return { canBuild: false, reason: `Need ${requiredCities} cities for ${country.buildings.factories + 1} factories` };
@@ -150,10 +144,8 @@ export function getPlayerTotalResources(playerId: string, countries: Record<stri
 export function initializeGame(config: GameConfig): GameState {
   const { mapWidth, mapHeight, playerCount, aiCount, playerNames, playerColors } = config;
   
-  // Generate map coordinates
   const coords = generateMapCoords(mapWidth, mapHeight);
   
-  // Create players
   const players: Record<string, Player> = {};
   const turnOrder: string[] = [];
   
@@ -175,7 +167,6 @@ export function initializeGame(config: GameConfig): GameState {
     turnOrder.push(id);
   }
   
-  // Create neutral player
   const neutralId = 'neutral';
   players[neutralId] = {
     id: neutralId,
@@ -189,21 +180,19 @@ export function initializeGame(config: GameConfig): GameState {
     outgoingAllianceRequests: [],
   };
   
-  // Create countries
   const countries: Record<string, Country> = {};
   coords.forEach((coord) => {
     const id = coordToId(coord);
     countries[id] = {
       id,
       coord,
-      ownerId: null, // will be assigned below
+      ownerId: null,
       resources: { money: 0, education: 0, technology: 0, army: 0 },
       buildings: { cities: 0, universities: 0, factories: 0, bases: 0 },
       naturalResources: Math.random() > 0.5,
     };
   });
   
-  // Assign starting positions - spread players as far apart as possible
   const startingPositions = getStartingPositions(coords, totalPlayers);
   startingPositions.forEach((coord, i) => {
     const countryId = coordToId(coord);
@@ -213,18 +202,17 @@ export function initializeGame(config: GameConfig): GameState {
     countries[countryId].buildings = { cities: 1, universities: 0, factories: 0, bases: 0 };
   });
   
-  // Set up neutral countries
   Object.values(countries).forEach((country) => {
     if (country.ownerId === null) {
       country.ownerId = neutralId;
       country.resources = {
-        money: Math.floor(Math.random() * 20) * 1000 + 1000, // 1000-20000
+        money: Math.floor(Math.random() * 20) * 1000 + 1000,
         education: 0,
         technology: 0,
-        army: Math.floor(Math.random() * 21) * 50, // 0-1000 in increments of 50
+        army: Math.floor(Math.random() * 21) * 50,
       };
       country.buildings = {
-        cities: Math.floor(Math.random() * 5), // 0-4
+        cities: Math.floor(Math.random() * 5),
         universities: 0,
         factories: 0,
         bases: 0,
@@ -232,7 +220,6 @@ export function initializeGame(config: GameConfig): GameState {
     }
   });
   
-  // Randomize first player
   const shuffledOrder = [...turnOrder].sort(() => Math.random() - 0.5);
   
   return {
@@ -250,19 +237,16 @@ export function initializeGame(config: GameConfig): GameState {
   };
 }
 
-// Get starting positions spread across the map
 function getStartingPositions(coords: { q: number; r: number }[], playerCount: number): { q: number; r: number }[] {
   if (coords.length < playerCount) return coords.slice(0, playerCount);
   
   const positions: { q: number; r: number }[] = [];
   const available = [...coords];
   
-  // Pick first position randomly
   const firstIdx = Math.floor(Math.random() * available.length);
   positions.push(available[firstIdx]);
   available.splice(firstIdx, 1);
   
-  // Pick remaining positions maximizing minimum distance
   while (positions.length < playerCount && available.length > 0) {
     let bestIdx = 0;
     let bestMinDist = -1;
@@ -289,12 +273,10 @@ function getStartingPositions(coords: { q: number; r: number }[], playerCount: n
   return positions;
 }
 
-// Get countries owned by a player
 export function getPlayerCountries(playerId: string, countries: Record<string, Country>): Country[] {
   return Object.values(countries).filter((c) => c.ownerId === playerId);
 }
 
-// Check if attack is valid
 export function canAttack(
   fromCountry: Country,
   toCountry: Country,
@@ -302,32 +284,26 @@ export function canAttack(
   player: Player,
   allPlayers: Record<string, Player>
 ): { canAttack: boolean; reason?: string } {
-  // Check ownership
   if (fromCountry.ownerId !== player.id) {
     return { canAttack: false, reason: 'You do not own this country' };
   }
   
-  // Check adjacency
   if (!areNeighbors(fromCountry.coord, toCountry.coord)) {
     return { canAttack: false, reason: 'Target must be adjacent' };
   }
   
-  // Check minimum army
   if (amount < 100) {
     return { canAttack: false, reason: 'Minimum 100 army to attack' };
   }
   
-  // Check available army
   if (fromCountry.resources.army < amount) {
     return { canAttack: false, reason: 'Not enough army' };
   }
   
-  // Cannot attack own country
   if (toCountry.ownerId === player.id) {
     return { canAttack: false, reason: 'Cannot attack your own country' };
   }
   
-  // Cannot attack allies
   if (toCountry.ownerId && player.allies.includes(toCountry.ownerId)) {
     return { canAttack: false, reason: 'Cannot attack allies' };
   }
@@ -335,7 +311,6 @@ export function canAttack(
   return { canAttack: true };
 }
 
-// Get adjacent countries that can be attacked
 export function getAttackableCountries(
   fromCountry: Country,
   countries: Record<string, Country>,
