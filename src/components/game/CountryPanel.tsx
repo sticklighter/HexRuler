@@ -304,7 +304,7 @@ export function CountryPanel({
                   const targetOwner = c.ownerId ? gameState.players[c.ownerId] : null;
                   return (
                     <option data-ev-id="ev_f940722c75" key={c.id} value={c.id}>
-                          {targetOwner?.name || 'Neutral'} - ⚔️{c.resources.army.toLocaleString()}
+                          ({c.coord.q}, {c.coord.r}) {targetOwner?.name || 'Neutral'} - ⚔️{c.resources.army.toLocaleString()}
                         </option>);
 
                 })}
