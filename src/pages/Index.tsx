@@ -18,6 +18,7 @@ export default function Index() {
     pendingActions,
     startGame,
     resetGame,
+    restartGame,
     getCurrentPlayer,
     addBuildAction,
     addMoveAction,
@@ -84,7 +85,7 @@ export default function Index() {
   const winner = gameState.winner ? gameState.players[gameState.winner] : null;
 
   return (
-    <div data-ev-id="ev_7c47818672" className="h-screen w-screen overflow-hidden bg-slate-900">
+    <div data-ev-id="ev_93249cda7b" className="h-screen w-screen overflow-hidden bg-slate-900">
       {/* Main hex grid */}
       <HexGrid
         gameState={gameState}
@@ -102,7 +103,8 @@ export default function Index() {
         pendingActionsCount={pendingActions.length}
         onEndTurn={endTurn}
         onClearActions={clearPendingActions}
-        onRestart={resetGame}
+        onRestart={restartGame}
+        onExit={resetGame}
         onRequestAlliance={requestAlliance}
         onAcceptAlliance={acceptAlliance}
         onRejectAlliance={rejectAlliance}
@@ -110,9 +112,9 @@ export default function Index() {
 
       }
       
-      {/* Pending actions panel - positioned to the right of sidebar */}
+      {/* Pending actions panel - RIGHT SIDE */}
       {pendingActions.length > 0 &&
-      <div data-ev-id="ev_73ceb6e549" className="absolute top-20 left-[280px] z-20">
+      <div data-ev-id="ev_d892a2ebdc" className="absolute top-4 right-20 z-20">
           <PendingActionsPanel
           actions={pendingActions}
           gameState={gameState}
