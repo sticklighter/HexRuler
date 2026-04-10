@@ -1,5 +1,5 @@
 // Hex Grid Component with Pan & Zoom
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import type { GameState } from '@/types/game';
 import { HexTile } from '@/components/game/HexTile';
 import { hexToPixel, HEX_SIZE } from '@/utils/hexUtils';
@@ -20,30 +20,37 @@ export function HexGrid({
   onSelectCountry
 }: HexGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
-  const [isDragging, setIsDragging] = useState(false);
+  const isDraggingRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0, transformX: 0, transformY: 0 });
+  const transformRef = useRef(transform);
   const [showDetails, setShowDetails] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
+
+  // Keep transformRef in sync
+  useEffect(() => {
+    transformRef.current = transform;
+  }, [transform]);
 
   // Calculate actual bounds from countries
   const countries = Object.values(gameState.countries);
   let minX = Infinity,minY = Infinity,maxX = -Infinity,maxY = -Infinity;
   countries.forEach((country) => {
     const { x, y } = hexToPixel(country.coord);
-    minX = Math.min(minX, x);
-    minY = Math.min(minY, y);
-    maxX = Math.max(maxX, x);
-    maxY = Math.max(maxY, y);
+    minX = Math.min(minX, x - HEX_SIZE);
+    minY = Math.min(minY, y - HEX_SIZE);
+    maxX = Math.max(maxX, x + HEX_SIZE);
+    maxY = Math.max(maxY, y + HEX_SIZE);
   });
 
-  const padding = HEX_SIZE * 1.5;
-  minX -= padding;
-  minY -= padding;
-  maxX += padding;
-  maxY += padding;
-  const mapWidth = maxX - minX;
-  const mapHeight = maxY - minY;
+  const padding = HEX_SIZE;
+  const boundsMinX = minX - padding;
+  const boundsMinY = minY - padding;
+  const boundsMaxX = maxX + padding;
+  const boundsMaxY = maxY + padding;
+  const mapWidth = boundsMaxX - boundsMinX;
+  const mapHeight = boundsMaxY - boundsMinY;
 
   // Center map on initial load
   useEffect(() => {
@@ -54,29 +61,30 @@ export function HexGrid({
 
         const scaleX = rect.width / mapWidth;
         const scaleY = rect.height / mapHeight;
-        const initialScale = Math.min(scaleX, scaleY, 2) * 0.9;
+        const initialScale = Math.min(scaleX, scaleY, 2) * 0.85;
 
-        // Center the map
-        const scaledWidth = mapWidth * initialScale;
-        const scaledHeight = mapHeight * initialScale;
-        const offsetX = (rect.width - scaledWidth) / 2 - minX * initialScale;
-        const offsetY = (rect.height - scaledHeight) / 2 - minY * initialScale;
+        // Center the map properly
+        const offsetX = rect.width / 2 - (boundsMinX + mapWidth / 2) * initialScale;
+        const offsetY = rect.height / 2 - (boundsMinY + mapHeight / 2) * initialScale;
 
-        setTransform({ x: offsetX, y: offsetY, scale: initialScale });
+        const newTransform = { x: offsetX, y: offsetY, scale: initialScale };
+        setTransform(newTransform);
+        transformRef.current = newTransform;
         setShowDetails(initialScale > 0.4);
         setIsInitialized(true);
       }
     };
 
-    const timer = setTimeout(centerMap, 100);
+    const timer = setTimeout(centerMap, 150);
     return () => clearTimeout(timer);
-  }, [mapWidth, mapHeight, minX, minY]);
+  }, [mapWidth, mapHeight, boundsMinX, boundsMinY]);
 
-  // Native wheel event listener (non-passive)
+  // All mouse/wheel handlers in a single effect with no transform dependencies
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
+    // Wheel zoom handler
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
       e.stopPropagation();
@@ -84,7 +92,6 @@ export function HexGrid({
       const rect = container.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
-
       const delta = e.deltaY > 0 ? 0.85 : 1.15;
 
       setTransform((prev) => {
@@ -97,63 +104,67 @@ export function HexGrid({
       });
     };
 
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
-  }, []);
-
-  // Native mouse event listeners for drag
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
+    // Mouse down handler for right-click drag
     const handleMouseDown = (e: MouseEvent) => {
       if (e.button === 2 || e.button === 1) {
         e.preventDefault();
         e.stopPropagation();
-        setIsDragging(true);
+        isDraggingRef.current = true;
         dragStartRef.current = {
           x: e.clientX,
           y: e.clientY,
-          transformX: transform.x,
-          transformY: transform.y
+          transformX: transformRef.current.x,
+          transformY: transformRef.current.y
         };
+        container.style.cursor = 'grabbing';
       }
     };
 
+    // Mouse move handler
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging) return;
+      if (!isDraggingRef.current) return;
       e.preventDefault();
 
       const deltaX = e.clientX - dragStartRef.current.x;
       const deltaY = e.clientY - dragStartRef.current.y;
 
-      setTransform((prev) => ({
-        ...prev,
+      const newTransform = {
         x: dragStartRef.current.transformX + deltaX,
-        y: dragStartRef.current.transformY + deltaY
-      }));
+        y: dragStartRef.current.transformY + deltaY,
+        scale: transformRef.current.scale
+      };
+      setTransform(newTransform);
+      transformRef.current = newTransform;
     };
 
-    const handleMouseUp = () => {
-      setIsDragging(false);
+    // Mouse up handler
+    const handleMouseUp = (e: MouseEvent) => {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+        container.style.cursor = 'grab';
+      }
     };
 
+    // Prevent context menu
     const handleContextMenu = (e: MouseEvent) => {
       e.preventDefault();
     };
 
+    // Add all event listeners
+    container.addEventListener('wheel', handleWheel, { passive: false });
     container.addEventListener('mousedown', handleMouseDown);
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
     container.addEventListener('contextmenu', handleContextMenu);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
 
     return () => {
+      container.removeEventListener('wheel', handleWheel);
       container.removeEventListener('mousedown', handleMouseDown);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
       container.removeEventListener('contextmenu', handleContextMenu);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, transform.x, transform.y]);
+  }, []); // Empty dependencies - handlers use refs
 
   // Zoom controls
   const zoomIn = () => {
@@ -164,12 +175,14 @@ export function HexGrid({
     setTransform((prev) => {
       const newScale = Math.min(prev.scale * 1.3, 4);
       const scaleChange = newScale / prev.scale;
-      setShowDetails(newScale > 0.4);
-      return {
+      const newTransform = {
         x: centerX - (centerX - prev.x) * scaleChange,
         y: centerY - (centerY - prev.y) * scaleChange,
         scale: newScale
       };
+      transformRef.current = newTransform;
+      setShowDetails(newScale > 0.4);
+      return newTransform;
     });
   };
 
@@ -181,12 +194,14 @@ export function HexGrid({
     setTransform((prev) => {
       const newScale = Math.max(prev.scale * 0.7, 0.15);
       const scaleChange = newScale / prev.scale;
-      setShowDetails(newScale > 0.4);
-      return {
+      const newTransform = {
         x: centerX - (centerX - prev.x) * scaleChange,
         y: centerY - (centerY - prev.y) * scaleChange,
         scale: newScale
       };
+      transformRef.current = newTransform;
+      setShowDetails(newScale > 0.4);
+      return newTransform;
     });
   };
 
@@ -195,35 +210,35 @@ export function HexGrid({
       const rect = containerRef.current.getBoundingClientRect();
       const scaleX = rect.width / mapWidth;
       const scaleY = rect.height / mapHeight;
-      const newScale = Math.min(scaleX, scaleY, 2) * 0.9;
+      const newScale = Math.min(scaleX, scaleY, 2) * 0.85;
 
-      const scaledWidth = mapWidth * newScale;
-      const scaledHeight = mapHeight * newScale;
-      const offsetX = (rect.width - scaledWidth) / 2 - minX * newScale;
-      const offsetY = (rect.height - scaledHeight) / 2 - minY * newScale;
+      const offsetX = rect.width / 2 - (boundsMinX + mapWidth / 2) * newScale;
+      const offsetY = rect.height / 2 - (boundsMinY + mapHeight / 2) * newScale;
 
-      setTransform({ x: offsetX, y: offsetY, scale: newScale });
+      const newTransform = { x: offsetX, y: offsetY, scale: newScale };
+      setTransform(newTransform);
+      transformRef.current = newTransform;
       setShowDetails(newScale > 0.4);
     }
   };
 
   return (
-    <div data-ev-id="ev_f825096ef0" className="relative w-full h-full bg-slate-900 overflow-hidden select-none">
+    <div data-ev-id="ev_46180164c6" className="relative w-full h-full bg-slate-900 overflow-hidden select-none">
       {/* Zoom Controls */}
-      <div data-ev-id="ev_2dc56717ce" className="absolute top-4 right-4 z-10 flex flex-col gap-2">
-        <button data-ev-id="ev_aa679783db"
+      <div data-ev-id="ev_dac7e9e23a" className="absolute top-4 right-4 z-10 flex flex-col gap-2">
+        <button data-ev-id="ev_1b5fac71b5"
         onClick={zoomIn}
         className="w-10 h-10 bg-slate-700 hover:bg-slate-600 text-white rounded-lg flex items-center justify-center text-xl font-bold transition-colors">
 
           +
         </button>
-        <button data-ev-id="ev_231fbe7c21"
+        <button data-ev-id="ev_e1f74ca121"
         onClick={zoomOut}
         className="w-10 h-10 bg-slate-700 hover:bg-slate-600 text-white rounded-lg flex items-center justify-center text-xl font-bold transition-colors">
 
           −
         </button>
-        <button data-ev-id="ev_9711bc4d22"
+        <button data-ev-id="ev_28dc546235"
         onClick={fitMap}
         className="w-10 h-10 bg-slate-700 hover:bg-slate-600 text-white rounded-lg flex items-center justify-center text-sm font-bold transition-colors"
         title="Fit map to view">
@@ -232,19 +247,15 @@ export function HexGrid({
         </button>
       </div>
 
-      {/* Instructions */}
-      <div data-ev-id="ev_b614150581" className="absolute bottom-4 right-4 z-10 text-slate-400 text-xs bg-slate-800/80 px-3 py-2 rounded">
-        Right-click + drag to pan • Scroll to zoom
-      </div>
-
       {/* SVG Map Container */}
-      <div data-ev-id="ev_899ba16e28"
+      <div data-ev-id="ev_422edb8e21"
       ref={containerRef}
       className="w-full h-full"
-      style={{ cursor: isDragging ? 'grabbing' : 'grab' }}>
+      style={{ cursor: 'grab' }}>
 
         {isInitialized &&
-        <svg data-ev-id="ev_037e797436"
+        <svg data-ev-id="ev_bb73ab924f"
+        ref={svgRef}
         width="100%"
         height="100%"
         style={{
