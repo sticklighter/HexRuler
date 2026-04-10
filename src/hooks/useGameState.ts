@@ -26,6 +26,7 @@ export function useGameState() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [selectedCountryId, setSelectedCountryId] = useState<string | null>(null);
   const [pendingActions, setPendingActions] = useState<PlannedAction[]>([]);
+  const [lastConfig, setLastConfig] = useState<GameConfig | null>(null);
   
   // Start a new game
   const startGame = useCallback((config: GameConfig) => {
@@ -33,14 +34,25 @@ export function useGameState() {
     setGameState(newState);
     setPendingActions([]);
     setSelectedCountryId(null);
+    setLastConfig(config);
   }, []);
   
-  // Reset to setup screen
+  // Reset to setup screen (exit)
   const resetGame = useCallback(() => {
     setGameState(null);
     setPendingActions([]);
     setSelectedCountryId(null);
   }, []);
+  
+  // Restart the same game with same config
+  const restartGame = useCallback(() => {
+    if (lastConfig) {
+      const newState = initializeGame(lastConfig);
+      setGameState(newState);
+      setPendingActions([]);
+      setSelectedCountryId(null);
+    }
+  }, [lastConfig]);
   
   // Get current player
   const getCurrentPlayer = useCallback(() => {
@@ -208,9 +220,24 @@ export function useGameState() {
     setPendingActions([]);
   }, []);
   
+  // Check if current player has pending alliance requests to handle
+  const hasPendingAllianceRequests = useCallback(() => {
+    if (!gameState) return false;
+    const currentPlayer = getCurrentPlayer();
+    if (!currentPlayer || currentPlayer.isAI) return false;
+    return currentPlayer.pendingAllianceRequests.length > 0;
+  }, [gameState, getCurrentPlayer]);
+  
   // End turn
   const endTurn = useCallback(() => {
     if (!gameState) return;
+    
+    // Check if player has pending alliance requests they must respond to
+    const currentPlayer = getCurrentPlayer();
+    if (currentPlayer && !currentPlayer.isAI && currentPlayer.pendingAllianceRequests.length > 0) {
+      // Don't allow ending turn - must handle alliance requests first
+      return;
+    }
     
     setGameState(prev => {
       if (!prev) return prev;
@@ -665,6 +692,7 @@ export function useGameState() {
     pendingActions,
     startGame,
     resetGame,
+    restartGame,
     getCurrentPlayer,
     addBuildAction,
     addMoveAction,
