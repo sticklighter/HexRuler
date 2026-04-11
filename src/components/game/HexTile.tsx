@@ -28,17 +28,20 @@ export function HexTile({
   const strokeColor = isSelected ? '#FBBF24' : isAttackTarget ? '#EF4444' : '#1F2937';
   const strokeWidth = isSelected || isAttackTarget ? 4 : 2;
 
-  const { cities, universities, factories, bases } = country.buildings;
+  const { cities, universities, factories, bases, baseUpgrades } = country.buildings;
   const { army, money } = country.resources;
 
+  // Generate stars for base upgrades
+  const upgradeStars = baseUpgrades > 0 ? '★'.repeat(baseUpgrades) : '';
+
   return (
-    <g data-ev-id="ev_abffc006d7"
+    <g data-ev-id="ev_9a94437b19"
     transform={`translate(${x}, ${y})`}
     onClick={onClick}
     style={{ cursor: 'pointer' }}>
 
       {/* Hex shape */}
-      <polygon data-ev-id="ev_fcfabf5480"
+      <polygon data-ev-id="ev_6f56599f38"
       points={points}
       fill={fillColor}
       stroke={strokeColor}
@@ -48,7 +51,7 @@ export function HexTile({
       
       {/* Highlight for owned countries */}
       {isCurrentPlayerOwned &&
-      <polygon data-ev-id="ev_5c19709111"
+      <polygon data-ev-id="ev_15d687eb80"
       points={getHexPoints(0, 0, HEX_SIZE - 8)}
       fill="none"
       stroke="#FFFFFF"
@@ -60,7 +63,7 @@ export function HexTile({
       {showDetails &&
       <>
           {/* Army count (center, large) */}
-          <text data-ev-id="ev_d7a6a0fe27"
+          <text data-ev-id="ev_b9943f4e87"
         x={0}
         y={-8}
         textAnchor="middle"
@@ -73,7 +76,7 @@ export function HexTile({
           </text>
           
           {/* Buildings indicator */}
-          <text data-ev-id="ev_3f97832409"
+          <text data-ev-id="ev_624ab0bad8"
         x={0}
         y={8}
         textAnchor="middle"
@@ -81,11 +84,11 @@ export function HexTile({
         fontSize={9}
         style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>
 
-            🏙️{cities} 🎓{universities} 🏭{factories} 🏰{bases}
+            🏙️{cities} 🎓{universities} 🏭{factories} 🏰{bases}{upgradeStars}
           </text>
           
           {/* Money (bottom) */}
-          <text data-ev-id="ev_7e0b3599d3"
+          <text data-ev-id="ev_3fb3ac5c6f"
         x={0}
         y={22}
         textAnchor="middle"
@@ -100,7 +103,7 @@ export function HexTile({
       
       {!showDetails && (
       /* Minimal view - just army */
-      <text data-ev-id="ev_05bb7a54af"
+      <text data-ev-id="ev_1d1d91d05c"
       x={0}
       y={4}
       textAnchor="middle"
