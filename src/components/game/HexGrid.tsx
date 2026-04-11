@@ -1,5 +1,5 @@
 // Hex Grid Component with Pan & Zoom
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import type { GameState } from '@/types/game';
 import { HexTile } from '@/components/game/HexTile';
 import { hexToPixel, HEX_SIZE } from '@/utils/hexUtils';
@@ -20,71 +20,115 @@ export function HexGrid({
   onSelectCountry
 }: HexGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
-  const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
-  const isDraggingRef = useRef(false);
-  const dragStartRef = useRef({ x: 0, y: 0, transformX: 0, transformY: 0 });
-  const transformRef = useRef(transform);
+  const [viewBox, setViewBox] = useState({ x: 0, y: 0, width: 1000, height: 800 });
   const [showDetails, setShowDetails] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Keep transformRef in sync
-  useEffect(() => {
-    transformRef.current = transform;
-  }, [transform]);
+  // Drag state
+  const isDraggingRef = useRef(false);
+  const lastMouseRef = useRef({ x: 0, y: 0 });
+  const viewBoxRef = useRef(viewBox);
 
-  // Calculate actual bounds from countries
+  // Keep viewBoxRef in sync
+  useEffect(() => {
+    viewBoxRef.current = viewBox;
+  }, [viewBox]);
+
+  // Calculate map bounds
   const countries = Object.values(gameState.countries);
   let minX = Infinity,minY = Infinity,maxX = -Infinity,maxY = -Infinity;
   countries.forEach((country) => {
     const { x, y } = hexToPixel(country.coord);
-    minX = Math.min(minX, x - HEX_SIZE);
-    minY = Math.min(minY, y - HEX_SIZE);
-    maxX = Math.max(maxX, x + HEX_SIZE);
-    maxY = Math.max(maxY, y + HEX_SIZE);
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
   });
 
-  const padding = HEX_SIZE;
-  const boundsMinX = minX - padding;
-  const boundsMinY = minY - padding;
-  const boundsMaxX = maxX + padding;
-  const boundsMaxY = maxY + padding;
-  const mapWidth = boundsMaxX - boundsMinX;
-  const mapHeight = boundsMaxY - boundsMinY;
+  const padding = HEX_SIZE * 2;
+  const mapMinX = minX - padding;
+  const mapMinY = minY - padding;
+  const mapMaxX = maxX + padding;
+  const mapMaxY = maxY + padding;
+  const mapWidth = mapMaxX - mapMinX;
+  const mapHeight = mapMaxY - mapMinY;
 
-  // Center map on initial load
+  // Initialize viewBox to fit the map
   useEffect(() => {
-    const centerMap = () => {
-      if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) return;
+    if (containerRef.current && !isInitialized) {
+      const rect = containerRef.current.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
 
-        const scaleX = rect.width / mapWidth;
-        const scaleY = rect.height / mapHeight;
-        const initialScale = Math.min(scaleX, scaleY, 2) * 0.85;
+      // Calculate scale to fit the map with some padding
+      const scaleX = mapWidth / rect.width;
+      const scaleY = mapHeight / rect.height;
+      const scale = Math.max(scaleX, scaleY) * 1.1;
 
-        // Center the map properly
-        const offsetX = rect.width / 2 - (boundsMinX + mapWidth / 2) * initialScale;
-        const offsetY = rect.height / 2 - (boundsMinY + mapHeight / 2) * initialScale;
+      const vbWidth = rect.width * scale;
+      const vbHeight = rect.height * scale;
+      const vbX = mapMinX + mapWidth / 2 - vbWidth / 2;
+      const vbY = mapMinY + mapHeight / 2 - vbHeight / 2;
 
-        const newTransform = { x: offsetX, y: offsetY, scale: initialScale };
-        setTransform(newTransform);
-        transformRef.current = newTransform;
-        setShowDetails(initialScale > 0.4);
-        setIsInitialized(true);
-      }
-    };
+      const newViewBox = { x: vbX, y: vbY, width: vbWidth, height: vbHeight };
+      setViewBox(newViewBox);
+      viewBoxRef.current = newViewBox;
+      setShowDetails(scale < 2);
+      setIsInitialized(true);
+    }
+  }, [mapMinX, mapMinY, mapWidth, mapHeight, isInitialized]);
 
-    const timer = setTimeout(centerMap, 150);
-    return () => clearTimeout(timer);
-  }, [mapWidth, mapHeight, boundsMinX, boundsMinY]);
+  // Mouse down handler
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    // Right click or middle click to pan
+    if (e.button === 2 || e.button === 1) {
+      e.preventDefault();
+      e.stopPropagation();
+      isDraggingRef.current = true;
+      lastMouseRef.current = { x: e.clientX, y: e.clientY };
 
-  // All mouse/wheel handlers in a single effect with no transform dependencies
+      // Add move/up handlers to document
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        if (!isDraggingRef.current) return;
+        moveEvent.preventDefault();
+
+        const container = containerRef.current;
+        if (!container) return;
+        const rect = container.getBoundingClientRect();
+
+        const dx = moveEvent.clientX - lastMouseRef.current.x;
+        const dy = moveEvent.clientY - lastMouseRef.current.y;
+        lastMouseRef.current = { x: moveEvent.clientX, y: moveEvent.clientY };
+
+        // Convert pixel delta to viewBox delta
+        const vb = viewBoxRef.current;
+        const scaleX = vb.width / rect.width;
+        const scaleY = vb.height / rect.height;
+
+        const newViewBox = {
+          ...vb,
+          x: vb.x - dx * scaleX,
+          y: vb.y - dy * scaleY
+        };
+        setViewBox(newViewBox);
+        viewBoxRef.current = newViewBox;
+      };
+
+      const handleMouseUp = () => {
+        isDraggingRef.current = false;
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+  }, []);
+
+  // Wheel zoom handler
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    // Wheel zoom handler
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
       e.stopPropagation();
@@ -92,153 +136,111 @@ export function HexGrid({
       const rect = container.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
-      const delta = e.deltaY > 0 ? 0.85 : 1.15;
 
-      setTransform((prev) => {
-        const newScale = Math.min(Math.max(prev.scale * delta, 0.15), 4);
-        const scaleChange = newScale / prev.scale;
-        const newX = mouseX - (mouseX - prev.x) * scaleChange;
-        const newY = mouseY - (mouseY - prev.y) * scaleChange;
-        setShowDetails(newScale > 0.4);
-        return { x: newX, y: newY, scale: newScale };
-      });
+      const vb = viewBoxRef.current;
+      const zoomFactor = e.deltaY > 0 ? 1.15 : 0.85;
+
+      // Mouse position in SVG coordinates
+      const svgX = vb.x + mouseX / rect.width * vb.width;
+      const svgY = vb.y + mouseY / rect.height * vb.height;
+
+      // New dimensions
+      const newWidth = Math.max(100, Math.min(vb.width * zoomFactor, mapWidth * 3));
+      const newHeight = Math.max(100, Math.min(vb.height * zoomFactor, mapHeight * 3));
+
+      // Adjust position to keep mouse point stationary
+      const newX = svgX - mouseX / rect.width * newWidth;
+      const newY = svgY - mouseY / rect.height * newHeight;
+
+      const newViewBox = { x: newX, y: newY, width: newWidth, height: newHeight };
+      setViewBox(newViewBox);
+      viewBoxRef.current = newViewBox;
+
+      const scale = newWidth / rect.width;
+      setShowDetails(scale < 2);
     };
 
-    // Mouse down handler for right-click drag
-    const handleMouseDown = (e: MouseEvent) => {
-      if (e.button === 2 || e.button === 1) {
-        e.preventDefault();
-        e.stopPropagation();
-        isDraggingRef.current = true;
-        dragStartRef.current = {
-          x: e.clientX,
-          y: e.clientY,
-          transformX: transformRef.current.x,
-          transformY: transformRef.current.y
-        };
-        container.style.cursor = 'grabbing';
-      }
-    };
-
-    // Mouse move handler
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDraggingRef.current) return;
-      e.preventDefault();
-
-      const deltaX = e.clientX - dragStartRef.current.x;
-      const deltaY = e.clientY - dragStartRef.current.y;
-
-      const newTransform = {
-        x: dragStartRef.current.transformX + deltaX,
-        y: dragStartRef.current.transformY + deltaY,
-        scale: transformRef.current.scale
-      };
-      setTransform(newTransform);
-      transformRef.current = newTransform;
-    };
-
-    // Mouse up handler
-    const handleMouseUp = (e: MouseEvent) => {
-      if (isDraggingRef.current) {
-        isDraggingRef.current = false;
-        container.style.cursor = 'grab';
-      }
-    };
-
-    // Prevent context menu
-    const handleContextMenu = (e: MouseEvent) => {
-      e.preventDefault();
-    };
-
-    // Add all event listeners
     container.addEventListener('wheel', handleWheel, { passive: false });
-    container.addEventListener('mousedown', handleMouseDown);
-    container.addEventListener('contextmenu', handleContextMenu);
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, [mapWidth, mapHeight]);
 
-    return () => {
-      container.removeEventListener('wheel', handleWheel);
-      container.removeEventListener('mousedown', handleMouseDown);
-      container.removeEventListener('contextmenu', handleContextMenu);
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, []); // Empty dependencies - handlers use refs
+  // Prevent context menu
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+  }, []);
 
   // Zoom controls
   const zoomIn = () => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-    setTransform((prev) => {
-      const newScale = Math.min(prev.scale * 1.3, 4);
-      const scaleChange = newScale / prev.scale;
-      const newTransform = {
-        x: centerX - (centerX - prev.x) * scaleChange,
-        y: centerY - (centerY - prev.y) * scaleChange,
-        scale: newScale
-      };
-      transformRef.current = newTransform;
-      setShowDetails(newScale > 0.4);
-      return newTransform;
-    });
-  };
+    const vb = viewBoxRef.current;
+    const newWidth = vb.width * 0.7;
+    const newHeight = vb.height * 0.7;
+    const newX = vb.x + (vb.width - newWidth) / 2;
+    const newY = vb.y + (vb.height - newHeight) / 2;
+    const newViewBox = { x: newX, y: newY, width: newWidth, height: newHeight };
+    setViewBox(newViewBox);
+    viewBoxRef.current = newViewBox;
 
-  const zoomOut = () => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-    setTransform((prev) => {
-      const newScale = Math.max(prev.scale * 0.7, 0.15);
-      const scaleChange = newScale / prev.scale;
-      const newTransform = {
-        x: centerX - (centerX - prev.x) * scaleChange,
-        y: centerY - (centerY - prev.y) * scaleChange,
-        scale: newScale
-      };
-      transformRef.current = newTransform;
-      setShowDetails(newScale > 0.4);
-      return newTransform;
-    });
-  };
-
-  const fitMap = () => {
-    if (containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      const scaleX = rect.width / mapWidth;
-      const scaleY = rect.height / mapHeight;
-      const newScale = Math.min(scaleX, scaleY, 2) * 0.85;
-
-      const offsetX = rect.width / 2 - (boundsMinX + mapWidth / 2) * newScale;
-      const offsetY = rect.height / 2 - (boundsMinY + mapHeight / 2) * newScale;
-
-      const newTransform = { x: offsetX, y: offsetY, scale: newScale };
-      setTransform(newTransform);
-      transformRef.current = newTransform;
-      setShowDetails(newScale > 0.4);
+    const container = containerRef.current;
+    if (container) {
+      const rect = container.getBoundingClientRect();
+      setShowDetails(newWidth / rect.width < 2);
     }
   };
 
+  const zoomOut = () => {
+    const vb = viewBoxRef.current;
+    const newWidth = Math.min(vb.width * 1.3, mapWidth * 3);
+    const newHeight = Math.min(vb.height * 1.3, mapHeight * 3);
+    const newX = vb.x - (newWidth - vb.width) / 2;
+    const newY = vb.y - (newHeight - vb.height) / 2;
+    const newViewBox = { x: newX, y: newY, width: newWidth, height: newHeight };
+    setViewBox(newViewBox);
+    viewBoxRef.current = newViewBox;
+
+    const container = containerRef.current;
+    if (container) {
+      const rect = container.getBoundingClientRect();
+      setShowDetails(newWidth / rect.width < 2);
+    }
+  };
+
+  const fitMap = () => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    const scaleX = mapWidth / rect.width;
+    const scaleY = mapHeight / rect.height;
+    const scale = Math.max(scaleX, scaleY) * 1.1;
+
+    const vbWidth = rect.width * scale;
+    const vbHeight = rect.height * scale;
+    const vbX = mapMinX + mapWidth / 2 - vbWidth / 2;
+    const vbY = mapMinY + mapHeight / 2 - vbHeight / 2;
+
+    const newViewBox = { x: vbX, y: vbY, width: vbWidth, height: vbHeight };
+    setViewBox(newViewBox);
+    viewBoxRef.current = newViewBox;
+    setShowDetails(scale < 2);
+  };
+
   return (
-    <div data-ev-id="ev_46180164c6" className="relative w-full h-full bg-slate-900 overflow-hidden select-none">
+    <div data-ev-id="ev_45c5b28723" className="relative w-full h-full bg-slate-900 overflow-hidden select-none">
       {/* Zoom Controls */}
-      <div data-ev-id="ev_dac7e9e23a" className="absolute top-4 right-4 z-10 flex flex-col gap-2">
-        <button data-ev-id="ev_1b5fac71b5"
+      <div data-ev-id="ev_d434fe5992" className="absolute top-4 right-4 z-10 flex flex-col gap-2">
+        <button data-ev-id="ev_bcfb6b8479"
         onClick={zoomIn}
         className="w-10 h-10 bg-slate-700 hover:bg-slate-600 text-white rounded-lg flex items-center justify-center text-xl font-bold transition-colors">
 
           +
         </button>
-        <button data-ev-id="ev_e1f74ca121"
+        <button data-ev-id="ev_1df160b57a"
         onClick={zoomOut}
         className="w-10 h-10 bg-slate-700 hover:bg-slate-600 text-white rounded-lg flex items-center justify-center text-xl font-bold transition-colors">
 
           −
         </button>
-        <button data-ev-id="ev_28dc546235"
+        <button data-ev-id="ev_d043db1f32"
         onClick={fitMap}
         className="w-10 h-10 bg-slate-700 hover:bg-slate-600 text-white rounded-lg flex items-center justify-center text-sm font-bold transition-colors"
         title="Fit map to view">
@@ -247,21 +249,19 @@ export function HexGrid({
         </button>
       </div>
 
-      {/* SVG Map Container */}
-      <div data-ev-id="ev_422edb8e21"
+      {/* SVG Map */}
+      <div data-ev-id="ev_8ef53c2446"
       ref={containerRef}
-      className="w-full h-full"
-      style={{ cursor: 'grab' }}>
+      className="w-full h-full cursor-grab active:cursor-grabbing"
+      onMouseDown={handleMouseDown}
+      onContextMenu={handleContextMenu}>
 
         {isInitialized &&
-        <svg data-ev-id="ev_bb73ab924f"
-        ref={svgRef}
+        <svg data-ev-id="ev_6c311b5589"
         width="100%"
         height="100%"
-        style={{
-          transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
-          transformOrigin: '0 0'
-        }}>
+        viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`}
+        preserveAspectRatio="xMidYMid meet">
 
             {countries.map((country) => {
             const player = country.ownerId ? gameState.players[country.ownerId] : null;
