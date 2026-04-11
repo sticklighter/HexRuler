@@ -21,6 +21,7 @@ export default function Index() {
     restartGame,
     getCurrentPlayer,
     addBuildAction,
+    addUpgradeBaseAction,
     addMoveAction,
     addAttackAction,
     removePendingAction,
@@ -57,6 +58,11 @@ export default function Index() {
     return addBuildAction(selectedCountryId, buildingType);
   }, [selectedCountryId, addBuildAction]);
 
+  const handleUpgradeBase = useCallback(() => {
+    if (!selectedCountryId) return false;
+    return addUpgradeBaseAction(selectedCountryId);
+  }, [selectedCountryId, addUpgradeBaseAction]);
+
   const handleMove = useCallback((toCountryId: string, amount: number) => {
     if (!selectedCountryId) return false;
     return addMoveAction(selectedCountryId, toCountryId, amount);
@@ -85,7 +91,7 @@ export default function Index() {
   const winner = gameState.winner ? gameState.players[gameState.winner] : null;
 
   return (
-    <div data-ev-id="ev_93249cda7b" className="h-screen w-screen overflow-hidden bg-slate-900">
+    <div data-ev-id="ev_49662b1058" className="h-screen w-screen overflow-hidden bg-slate-900">
       {/* Main hex grid */}
       <HexGrid
         gameState={gameState}
@@ -100,7 +106,7 @@ export default function Index() {
       <LeftSidebar
         gameState={gameState}
         currentPlayer={currentPlayer}
-        pendingActionsCount={pendingActions.length}
+        pendingActions={pendingActions}
         onEndTurn={endTurn}
         onClearActions={clearPendingActions}
         onRestart={restartGame}
@@ -114,7 +120,7 @@ export default function Index() {
       
       {/* Pending actions panel - RIGHT SIDE */}
       {pendingActions.length > 0 &&
-      <div data-ev-id="ev_d892a2ebdc" className="absolute top-4 right-20 z-20">
+      <div data-ev-id="ev_732df54b84" className="absolute top-4 right-20 z-20">
           <PendingActionsPanel
           actions={pendingActions}
           gameState={gameState}
@@ -132,6 +138,7 @@ export default function Index() {
         gameState={gameState}
         pendingActions={pendingActions}
         onBuild={handleBuild}
+        onUpgradeBase={handleUpgradeBase}
         onMove={handleMove}
         onAttack={handleAttack}
         onClose={() => setSelectedCountryId(null)} />
