@@ -1,5 +1,5 @@
 // Pending Actions Panel - Shows queued actions for current turn
-import type { PlannedAction, BuildAction, MoveAction, AttackAction, GameState } from '@/types/game';
+import type { PlannedAction, BuildAction, MoveAction, AttackAction, UpgradeBaseAction, GameState } from '@/types/game';
 
 interface PendingActionsPanelProps {
   actions: PlannedAction[];
@@ -46,6 +46,7 @@ export function PendingActionsPanel({ actions, gameState, onRemoveAction }: Pend
 function ActionIcon({ type }: {type: string;}) {
   const icons: Record<string, {emoji: string;bg: string;}> = {
     build: { emoji: '🛠️', bg: 'bg-amber-500/20' },
+    upgrade_base: { emoji: '⬆️', bg: 'bg-purple-500/20' },
     move: { emoji: '🚩', bg: 'bg-blue-500/20' },
     attack: { emoji: '⚔️', bg: 'bg-red-500/20' },
     alliance_request: { emoji: '🤝', bg: 'bg-green-500/20' },
@@ -54,7 +55,7 @@ function ActionIcon({ type }: {type: string;}) {
   const { emoji, bg } = icons[type] || { emoji: '❓', bg: 'bg-slate-500/20' };
 
   return (
-    <div data-ev-id="ev_47f1ed08fd" className={`w-8 h-8 rounded-lg flex items-center justify-center ${bg}`}>
+    <div data-ev-id="ev_df2a4c8432" className={`w-8 h-8 rounded-lg flex items-center justify-center ${bg}`}>
       {emoji}
     </div>);
 
@@ -65,6 +66,9 @@ function getActionTitle(action: PlannedAction, gameState: GameState): string {
     case 'build':{
         const data = action.data as BuildAction;
         return `Build ${data.buildingType}`;
+      }
+    case 'upgrade_base':{
+        return 'Upgrade Base';
       }
     case 'move':{
         const data = action.data as MoveAction;
@@ -83,6 +87,11 @@ function getActionDetails(action: PlannedAction, gameState: GameState): string {
   switch (action.type) {
     case 'build':{
         const data = action.data as BuildAction;
+        const country = gameState.countries[data.countryId];
+        return `at (${country?.coord.q}, ${country?.coord.r})`;
+      }
+    case 'upgrade_base':{
+        const data = action.data as UpgradeBaseAction;
         const country = gameState.countries[data.countryId];
         return `at (${country?.coord.q}, ${country?.coord.r})`;
       }
