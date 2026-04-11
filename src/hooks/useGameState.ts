@@ -7,17 +7,20 @@ import type {
   BuildAction,
   MoveAction,
   AttackAction,
+  UpgradeBaseAction,
   CombatLogEntry,
   Country,
 } from '@/types/game';
-import { BUILDING_COSTS } from '@/types/game';
+import { BUILDING_COSTS, BASE_UPGRADE_COSTS, BUILDING_UPKEEP } from '@/types/game';
 import {
   initializeGame,
   calculateIncome,
+  calculateUpkeep,
   resolveCombat,
   getPlayerCountries,
   getPlayerTotalResources,
   canBuild,
+  canUpgradeBase,
   canAttack,
 } from '@/utils/gameUtils';
 import { generateAIActions } from '@/utils/aiUtils';
@@ -73,7 +76,7 @@ export function useGameState() {
     // Calculate resources after pending actions
     const resources = getPlayerTotalResources(currentPlayer.id, gameState.countries);
     
-    // Subtract costs of pending build actions
+    // Subtract costs of pending build/upgrade actions
     pendingActions.forEach(action => {
       if (action.type === 'build' && action.playerId === currentPlayer.id) {
         const buildData = action.data as BuildAction;
@@ -81,6 +84,21 @@ export function useGameState() {
         resources.money -= cost.money;
         resources.education -= cost.education;
         resources.technology -= cost.technology;
+      } else if (action.type === 'upgrade_base' && action.playerId === currentPlayer.id) {
+        const upgradeData = action.data as UpgradeBaseAction;
+        const targetCountry = gameState.countries[upgradeData.countryId];
+        if (targetCountry) {
+          const pendingUpgrades = pendingActions.filter(
+            a => a.type === 'upgrade_base' && (a.data as UpgradeBaseAction).countryId === upgradeData.countryId
+          ).length;
+          const level = targetCountry.buildings.baseUpgrades + pendingUpgrades - 1;
+          if (level >= 0 && level < BASE_UPGRADE_COSTS.length) {
+            const cost = BASE_UPGRADE_COSTS[level];
+            resources.money -= cost.money;
+            resources.education -= cost.education;
+            resources.technology -= cost.technology;
+          }
+        }
       }
     });
     
@@ -103,6 +121,7 @@ export function useGameState() {
         universities: country.buildings.universities + pendingBuilds.university,
         factories: country.buildings.factories + pendingBuilds.factory,
         bases: country.buildings.bases + pendingBuilds.base,
+        baseUpgrades: country.buildings.baseUpgrades,
       },
     };
     
@@ -115,6 +134,74 @@ export function useGameState() {
         type: 'build',
         playerId: currentPlayer.id,
         data: { countryId, buildingType } as BuildAction,
+      },
+    ]);
+    
+    return true;
+  }, [gameState, getCurrentPlayer, pendingActions]);
+  
+  // Add a base upgrade action
+  const addUpgradeBaseAction = useCallback((countryId: string) => {
+    if (!gameState) return false;
+    
+    const currentPlayer = getCurrentPlayer();
+    if (!currentPlayer) return false;
+    
+    const country = gameState.countries[countryId];
+    if (!country || country.ownerId !== currentPlayer.id) return false;
+    
+    // Calculate resources after pending actions
+    const resources = getPlayerTotalResources(currentPlayer.id, gameState.countries);
+    
+    // Subtract costs of pending build/upgrade actions
+    pendingActions.forEach(action => {
+      if (action.type === 'build' && action.playerId === currentPlayer.id) {
+        const buildData = action.data as BuildAction;
+        const cost = BUILDING_COSTS[buildData.buildingType];
+        resources.money -= cost.money;
+        resources.education -= cost.education;
+        resources.technology -= cost.technology;
+      } else if (action.type === 'upgrade_base' && action.playerId === currentPlayer.id) {
+        const upgradeData = action.data as UpgradeBaseAction;
+        const targetCountry = gameState.countries[upgradeData.countryId];
+        if (targetCountry) {
+          const pendingUpgrades = pendingActions.filter(
+            a => a.type === 'upgrade_base' && (a.data as UpgradeBaseAction).countryId === upgradeData.countryId
+          ).length;
+          const level = targetCountry.buildings.baseUpgrades + pendingUpgrades - 1;
+          if (level >= 0 && level < BASE_UPGRADE_COSTS.length) {
+            const cost = BASE_UPGRADE_COSTS[level];
+            resources.money -= cost.money;
+            resources.education -= cost.education;
+            resources.technology -= cost.technology;
+          }
+        }
+      }
+    });
+    
+    // Count pending upgrades for this country
+    const pendingUpgrades = pendingActions.filter(
+      a => a.type === 'upgrade_base' && (a.data as UpgradeBaseAction).countryId === countryId
+    ).length;
+    
+    // Create temp country with pending upgrades
+    const tempCountry = {
+      ...country,
+      buildings: {
+        ...country.buildings,
+        baseUpgrades: country.buildings.baseUpgrades + pendingUpgrades,
+      },
+    };
+    
+    const check = canUpgradeBase(tempCountry, resources);
+    if (!check.canUpgrade) return false;
+    
+    setPendingActions(prev => [
+      ...prev,
+      {
+        type: 'upgrade_base',
+        playerId: currentPlayer.id,
+        data: { countryId } as UpgradeBaseAction,
       },
     ]);
     
@@ -138,17 +225,17 @@ export function useGameState() {
     let availableArmy = fromCountry.resources.army;
     pendingActions.forEach(action => {
       if (action.type === 'move' || action.type === 'attack') {
-        const moveData = action.data as MoveAction | AttackAction;
-        if (moveData.fromCountryId === fromCountryId) {
-          availableArmy -= moveData.amount;
+        const data = action.data as MoveAction | AttackAction;
+        if (data.fromCountryId === fromCountryId) {
+          availableArmy -= data.amount;
         }
-        if (action.type === 'move' && moveData.toCountryId === fromCountryId) {
-          availableArmy += moveData.amount;
+        if (action.type === 'move' && data.toCountryId === fromCountryId) {
+          availableArmy += data.amount;
         }
       }
     });
     
-    if (availableArmy < amount) return false;
+    if (amount > availableArmy || amount < 1) return false;
     
     setPendingActions(prev => [
       ...prev,
@@ -174,29 +261,24 @@ export function useGameState() {
     
     if (!fromCountry || !toCountry) return false;
     
+    const attackCheck = canAttack(fromCountry, toCountry, currentPlayer, gameState.countries);
+    if (!attackCheck.canAttack) return false;
+    
     // Calculate available army after pending moves/attacks
     let availableArmy = fromCountry.resources.army;
     pendingActions.forEach(action => {
       if (action.type === 'move' || action.type === 'attack') {
-        const moveData = action.data as MoveAction | AttackAction;
-        if (moveData.fromCountryId === fromCountryId) {
-          availableArmy -= moveData.amount;
+        const data = action.data as MoveAction | AttackAction;
+        if (data.fromCountryId === fromCountryId) {
+          availableArmy -= data.amount;
         }
-        if (action.type === 'move' && moveData.toCountryId === fromCountryId) {
-          availableArmy += moveData.amount;
+        if (action.type === 'move' && data.toCountryId === fromCountryId) {
+          availableArmy += data.amount;
         }
       }
     });
     
-    const check = canAttack(
-      { ...fromCountry, resources: { ...fromCountry.resources, army: availableArmy } },
-      toCountry,
-      amount,
-      currentPlayer,
-      gameState.players
-    );
-    
-    if (!check.canAttack) return false;
+    if (amount > availableArmy || amount < 100) return false;
     
     setPendingActions(prev => [
       ...prev,
@@ -220,14 +302,6 @@ export function useGameState() {
     setPendingActions([]);
   }, []);
   
-  // Check if current player has pending alliance requests to handle
-  const hasPendingAllianceRequests = useCallback(() => {
-    if (!gameState) return false;
-    const currentPlayer = getCurrentPlayer();
-    if (!currentPlayer || currentPlayer.isAI) return false;
-    return currentPlayer.pendingAllianceRequests.length > 0;
-  }, [gameState, getCurrentPlayer]);
-  
   // End turn
   const endTurn = useCallback(() => {
     if (!gameState) return;
@@ -247,8 +321,6 @@ export function useGameState() {
       
       // Move to next player
       let nextIndex = prev.currentPlayerIndex + prev.turnDirection;
-      let nextDirection = prev.turnDirection;
-      let nextRound = prev.round;
       let shouldResolve = false;
       
       // Check if round ended
@@ -272,19 +344,61 @@ export function useGameState() {
         return resolveRound({ ...prev, plannedActions: allPlannedActions });
       }
       
+      // Process AI alliance requests before their turn
+      let updatedPlayers = { ...prev.players };
+      const nextPlayerId = prev.turnOrder[nextIndex];
+      const nextPlayer = updatedPlayers[nextPlayerId];
+      
+      if (nextPlayer && nextPlayer.isAI && nextPlayer.pendingAllianceRequests.length > 0) {
+        // AI auto-responds to alliance requests (50% accept, 50% reject based on game situation)
+        nextPlayer.pendingAllianceRequests.forEach(fromId => {
+          const fromPlayer = updatedPlayers[fromId];
+          if (!fromPlayer) return;
+          
+          // AI decision: accept if they have fewer countries than requester, or random 50%
+          const aiCountries = getPlayerCountries(nextPlayerId, prev.countries).length;
+          const requesterCountries = getPlayerCountries(fromId, prev.countries).length;
+          const shouldAccept = aiCountries <= requesterCountries || Math.random() > 0.5;
+          
+          if (shouldAccept) {
+            // Accept alliance
+            updatedPlayers[nextPlayerId] = {
+              ...updatedPlayers[nextPlayerId],
+              allies: [...updatedPlayers[nextPlayerId].allies, fromId],
+              pendingAllianceRequests: updatedPlayers[nextPlayerId].pendingAllianceRequests.filter(id => id !== fromId),
+            };
+            updatedPlayers[fromId] = {
+              ...updatedPlayers[fromId],
+              allies: [...updatedPlayers[fromId].allies, nextPlayerId],
+              outgoingAllianceRequests: updatedPlayers[fromId].outgoingAllianceRequests.filter(id => id !== nextPlayerId),
+            };
+          } else {
+            // Reject alliance
+            updatedPlayers[nextPlayerId] = {
+              ...updatedPlayers[nextPlayerId],
+              pendingAllianceRequests: updatedPlayers[nextPlayerId].pendingAllianceRequests.filter(id => id !== fromId),
+            };
+            updatedPlayers[fromId] = {
+              ...updatedPlayers[fromId],
+              outgoingAllianceRequests: updatedPlayers[fromId].outgoingAllianceRequests.filter(id => id !== nextPlayerId),
+            };
+          }
+        });
+      }
+      
       return {
         ...prev,
         currentPlayerIndex: nextIndex,
         plannedActions: allPlannedActions,
+        players: updatedPlayers,
       };
     });
     
     setPendingActions([]);
-  }, [gameState, pendingActions]);
+  }, [gameState, pendingActions, getCurrentPlayer]);
   
   // Resolve a round
   const resolveRound = (state: GameState): GameState => {
-    let newState = { ...state };
     const newCountries = { ...state.countries };
     const newPlayers = { ...state.players };
     const combatLog: CombatLogEntry[] = [];
@@ -328,19 +442,21 @@ export function useGameState() {
             const eduTake = Math.min(pc.resources.education, remainingEdu);
             const techTake = Math.min(pc.resources.technology, remainingTech);
             
-            newCountries[pc.id] = {
-              ...newCountries[pc.id],
-              resources: {
-                ...newCountries[pc.id].resources,
-                money: newCountries[pc.id].resources.money - moneyTake,
-                education: newCountries[pc.id].resources.education - eduTake,
-                technology: newCountries[pc.id].resources.technology - techTake,
-              },
-            };
-            
-            remainingMoney -= moneyTake;
-            remainingEdu -= eduTake;
-            remainingTech -= techTake;
+            if (moneyTake > 0 || eduTake > 0 || techTake > 0) {
+              newCountries[pc.id] = {
+                ...newCountries[pc.id],
+                resources: {
+                  ...newCountries[pc.id].resources,
+                  money: newCountries[pc.id].resources.money - moneyTake,
+                  education: newCountries[pc.id].resources.education - eduTake,
+                  technology: newCountries[pc.id].resources.technology - techTake,
+                },
+              };
+              
+              remainingMoney -= moneyTake;
+              remainingEdu -= eduTake;
+              remainingTech -= techTake;
+            }
             
             if (remainingMoney <= 0 && remainingEdu <= 0 && remainingTech <= 0) break;
           }
@@ -359,14 +475,65 @@ export function useGameState() {
         }
       });
       
+      // Process base upgrades
+      playerActions.filter(a => a.type === 'upgrade_base').forEach(action => {
+        const data = action.data as UpgradeBaseAction;
+        const country = newCountries[data.countryId];
+        if (country && country.ownerId === playerId && country.buildings.bases >= 1 && country.buildings.baseUpgrades < 2) {
+          const upgradeLevel = country.buildings.baseUpgrades;
+          const cost = BASE_UPGRADE_COSTS[upgradeLevel];
+          
+          // Deduct costs
+          const playerCountries = Object.values(newCountries).filter(c => c.ownerId === playerId);
+          let remainingMoney = cost.money;
+          let remainingEdu = cost.education;
+          let remainingTech = cost.technology;
+          
+          for (const pc of playerCountries) {
+            const moneyTake = Math.min(pc.resources.money, remainingMoney);
+            const eduTake = Math.min(pc.resources.education, remainingEdu);
+            const techTake = Math.min(pc.resources.technology, remainingTech);
+            
+            if (moneyTake > 0 || eduTake > 0 || techTake > 0) {
+              newCountries[pc.id] = {
+                ...newCountries[pc.id],
+                resources: {
+                  ...newCountries[pc.id].resources,
+                  money: newCountries[pc.id].resources.money - moneyTake,
+                  education: newCountries[pc.id].resources.education - eduTake,
+                  technology: newCountries[pc.id].resources.technology - techTake,
+                },
+              };
+              
+              remainingMoney -= moneyTake;
+              remainingEdu -= eduTake;
+              remainingTech -= techTake;
+            }
+            
+            if (remainingMoney <= 0 && remainingEdu <= 0 && remainingTech <= 0) break;
+          }
+          
+          // Apply upgrade
+          newCountries[data.countryId] = {
+            ...newCountries[data.countryId],
+            buildings: {
+              ...newCountries[data.countryId].buildings,
+              baseUpgrades: newCountries[data.countryId].buildings.baseUpgrades + 1,
+            },
+          };
+        }
+      });
+      
       // Process moves
       playerActions.filter(a => a.type === 'move').forEach(action => {
         const data = action.data as MoveAction;
         const fromCountry = newCountries[data.fromCountryId];
         const toCountry = newCountries[data.toCountryId];
         
-        if (fromCountry && toCountry && fromCountry.ownerId === playerId && toCountry.ownerId === playerId) {
+        if (fromCountry && toCountry && 
+            fromCountry.ownerId === playerId && toCountry.ownerId === playerId) {
           const amount = Math.min(data.amount, fromCountry.resources.army);
+          
           newCountries[data.fromCountryId] = {
             ...newCountries[data.fromCountryId],
             resources: {
@@ -374,6 +541,7 @@ export function useGameState() {
               army: newCountries[data.fromCountryId].resources.army - amount,
             },
           };
+          
           newCountries[data.toCountryId] = {
             ...newCountries[data.toCountryId],
             resources: {
@@ -419,7 +587,7 @@ export function useGameState() {
             };
             
             if (result.result === 'attacker_wins') {
-              // Transfer ownership, destroy bases
+              // Transfer ownership, destroy bases and upgrades
               const oldOwner = toCountry.ownerId;
               newCountries[data.toCountryId] = {
                 ...newCountries[data.toCountryId],
@@ -430,7 +598,8 @@ export function useGameState() {
                 },
                 buildings: {
                   ...newCountries[data.toCountryId].buildings,
-                  bases: 0, // Bases destroyed on conquest
+                  bases: 0,
+                  baseUpgrades: 0, // Reset upgrades too
                 },
               };
               
@@ -502,18 +671,20 @@ export function useGameState() {
       }
     });
     
-    // Process income for all countries
+    // Process income for all countries (includes upkeep deductions)
     Object.values(newCountries).forEach(country => {
       if (country.ownerId) {
         const player = newPlayers[country.ownerId];
         if (player && !player.isEliminated) {
           const income = calculateIncome(country, player, Object.values(newCountries));
+          const upkeep = calculateUpkeep(country);
+          
           newCountries[country.id] = {
             ...newCountries[country.id],
             resources: {
-              money: newCountries[country.id].resources.money + income.money,
+              money: Math.max(0, newCountries[country.id].resources.money + income.money - upkeep.money),
               education: newCountries[country.id].resources.education + income.education,
-              technology: newCountries[country.id].resources.technology + income.technology,
+              technology: Math.max(0, newCountries[country.id].resources.technology + income.technology - upkeep.technology),
               army: newCountries[country.id].resources.army + income.army,
             },
           };
@@ -554,6 +725,45 @@ export function useGameState() {
       nextIndex += newDirection;
     }
     
+    // Handle AI alliance requests for the first player of the new round
+    const nextPlayerId = state.turnOrder[nextIndex];
+    if (nextPlayerId) {
+      const nextPlayer = newPlayers[nextPlayerId];
+      if (nextPlayer && nextPlayer.isAI && nextPlayer.pendingAllianceRequests.length > 0) {
+        nextPlayer.pendingAllianceRequests.forEach(fromId => {
+          const fromPlayer = newPlayers[fromId];
+          if (!fromPlayer) return;
+          
+          // AI decision
+          const aiCountries = Object.values(newCountries).filter(c => c.ownerId === nextPlayerId).length;
+          const requesterCountries = Object.values(newCountries).filter(c => c.ownerId === fromId).length;
+          const shouldAccept = aiCountries <= requesterCountries || Math.random() > 0.5;
+          
+          if (shouldAccept) {
+            newPlayers[nextPlayerId] = {
+              ...newPlayers[nextPlayerId],
+              allies: [...newPlayers[nextPlayerId].allies, fromId],
+              pendingAllianceRequests: newPlayers[nextPlayerId].pendingAllianceRequests.filter(id => id !== fromId),
+            };
+            newPlayers[fromId] = {
+              ...newPlayers[fromId],
+              allies: [...newPlayers[fromId].allies, nextPlayerId],
+              outgoingAllianceRequests: newPlayers[fromId].outgoingAllianceRequests.filter(id => id !== nextPlayerId),
+            };
+          } else {
+            newPlayers[nextPlayerId] = {
+              ...newPlayers[nextPlayerId],
+              pendingAllianceRequests: newPlayers[nextPlayerId].pendingAllianceRequests.filter(id => id !== fromId),
+            };
+            newPlayers[fromId] = {
+              ...newPlayers[fromId],
+              outgoingAllianceRequests: newPlayers[fromId].outgoingAllianceRequests.filter(id => id !== nextPlayerId),
+            };
+          }
+        });
+      }
+    }
+    
     return {
       ...state,
       phase: winner ? 'gameover' : 'planning',
@@ -580,7 +790,9 @@ export function useGameState() {
     );
     if (activePlayers.length <= 2) return;
     
-    // Cannot request if already allies or already requested
+    // Can't request to self, eliminated, neutral, or already allied
+    const target = gameState.players[targetPlayerId];
+    if (!target || target.isEliminated || target.isNeutral || target.id === currentPlayer.id) return;
     if (currentPlayer.allies.includes(targetPlayerId)) return;
     if (currentPlayer.outgoingAllianceRequests.includes(targetPlayerId)) return;
     
@@ -695,6 +907,7 @@ export function useGameState() {
     restartGame,
     getCurrentPlayer,
     addBuildAction,
+    addUpgradeBaseAction,
     addMoveAction,
     addAttackAction,
     removePendingAction,
