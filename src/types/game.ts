@@ -29,6 +29,7 @@ export interface Buildings {
   universities: number;
   factories: number;
   bases: number;
+  baseUpgrades: number; // 0, 1, or 2
 }
 
 export interface Country {
@@ -41,14 +42,18 @@ export interface Country {
 }
 
 export interface PlannedAction {
-  type: 'build' | 'move' | 'attack' | 'alliance_request' | 'alliance_break';
+  type: 'build' | 'move' | 'attack' | 'alliance_request' | 'alliance_break' | 'upgrade_base';
   playerId: string;
-  data: BuildAction | MoveAction | AttackAction | AllianceAction;
+  data: BuildAction | MoveAction | AttackAction | AllianceAction | UpgradeBaseAction;
 }
 
 export interface BuildAction {
   countryId: string;
   buildingType: 'city' | 'university' | 'factory' | 'base';
+}
+
+export interface UpgradeBaseAction {
+  countryId: string;
 }
 
 export interface MoveAction {
@@ -100,6 +105,7 @@ export interface GameConfig {
   aiCount: number;
   playerNames: string[];
   playerColors: string[];
+  initialAlliances?: [string, string][]; // pairs of player indices for initial alliances
 }
 
 export const BUILDING_COSTS: Record<string, { money: number; education: number; technology: number }> = {
@@ -107,6 +113,22 @@ export const BUILDING_COSTS: Record<string, { money: number; education: number; 
   university: { money: 5000, education: 0, technology: 0 },
   factory: { money: 2500, education: 2500, technology: 0 },
   base: { money: 20000, education: 5000, technology: 10000 },
+};
+
+// Base upgrade costs
+export const BASE_UPGRADE_COSTS: { money: number; education: number; technology: number }[] = [
+  { money: 10000, education: 2500, technology: 5000 }, // First upgrade
+  { money: 5000, education: 1250, technology: 2500 },  // Second upgrade
+];
+
+// Base upgrade army bonuses
+export const BASE_UPGRADE_BONUSES: number[] = [500, 250];
+
+// Building upkeep costs per turn
+export const BUILDING_UPKEEP: Record<string, { money: number; technology: number }> = {
+  university: { money: 500, technology: 0 },
+  factory: { money: 200, technology: 0 },
+  base: { money: 1000, technology: 200 },
 };
 
 export const BUILDING_LIMITS: Record<string, number> = {
